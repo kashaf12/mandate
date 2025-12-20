@@ -1,0 +1,14 @@
+{
+  "name": "mandate",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter sandbox dev",
+    "type-check": "pnpm -r type-check"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

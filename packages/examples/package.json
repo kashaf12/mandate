@@ -1,0 +1,19 @@
+{
+  "name": "@mandate/examples",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "example:basic": "tsx src/basic.ts",
+    "example:blocking": "tsx src/blocking.ts",
+    "example:ollama-email": "tsx src/ollama-email.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mandate/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "tsx": "^4.19.2",
+    "@types/node": "^22.10.2"
+  }
+}
