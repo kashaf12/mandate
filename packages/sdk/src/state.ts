@@ -14,31 +14,32 @@ export class StateManager {
   }
 
   /**
-   * Commit state changes after successful execution.
+   * Commit state changes after execution.
    *
-   * CRITICAL: This must ONLY be called after action succeeds.
-   * If execution fails, state remains unchanged.
+   * CRITICAL: Can be called after success OR failure, depending on charging policy.
+   * The cost parameter has already been computed by the charging policy evaluator.
    *
-   * This implements the core invariant:
-   * - Authorize → Execute → Commit (only if success)
+   * @param action - The action that was executed
+   * @param state - Agent state to mutate
+   * @param cost - Actual cost to charge (computed by charging policy)
+   * @param agentRateLimit - Agent-level rate limit (optional)
+   * @param toolRateLimit - Tool-level rate limit (optional)
    */
   commitSuccess(
     action: Action,
     state: AgentState,
-    result?: { actualCost?: number },
+    cost: number,
     agentRateLimit?: RateLimit,
     toolRateLimit?: RateLimit
   ): void {
-    const actualCost = result?.actualCost ?? action.estimatedCost ?? 0;
-
-    // Update cumulative cost
-    state.cumulativeCost += actualCost;
+    // Update cumulative cost with the computed cost
+    state.cumulativeCost += cost;
 
     // Track cost by type (COGNITION vs EXECUTION)
     if (action.costType === "COGNITION") {
-      state.cognitionCost += actualCost;
+      state.cognitionCost += cost;
     } else if (action.costType === "EXECUTION") {
-      state.executionCost += actualCost;
+      state.executionCost += cost;
     }
 
     // Record action ID for replay protection

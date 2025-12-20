@@ -55,7 +55,7 @@ describe("StateManager", () => {
         costType: "COGNITION",
       };
 
-      manager.commitSuccess(action, state, { actualCost: 0.48 });
+      manager.commitSuccess(action, state, 0.48);
 
       expect(state.cumulativeCost).toBe(0.48);
       expect(state.cognitionCost).toBe(0.48);
@@ -76,7 +76,7 @@ describe("StateManager", () => {
         estimatedCost: 0.5,
       };
 
-      manager.commitSuccess(action, state);
+      manager.commitSuccess(action, state, action.estimatedCost || 0);
 
       expect(state.cumulativeCost).toBe(0.5);
     });
@@ -91,7 +91,7 @@ describe("StateManager", () => {
         tool: "read_file",
       };
 
-      manager.commitSuccess(action, state);
+      manager.commitSuccess(action, state, action.estimatedCost || 0);
 
       expect(state.callCount).toBe(1);
     });
@@ -106,7 +106,7 @@ describe("StateManager", () => {
         tool: "read_file",
       };
 
-      manager.commitSuccess(action, state);
+      manager.commitSuccess(action, state, action.estimatedCost || 0);
 
       expect(state.seenActionIds.has("action-1")).toBe(true);
     });
@@ -122,7 +122,7 @@ describe("StateManager", () => {
         idempotencyKey: "idem-1",
       };
 
-      manager.commitSuccess(action, state);
+      manager.commitSuccess(action, state, action.estimatedCost || 0);
 
       expect(state.seenIdempotencyKeys.has("idem-1")).toBe(true);
     });
@@ -137,7 +137,7 @@ describe("StateManager", () => {
         tool: "send_email",
       };
 
-      manager.commitSuccess(action, state);
+      manager.commitSuccess(action, state, action.estimatedCost || 0);
 
       expect(state.toolCallCounts.send_email).toBeDefined();
       expect(state.toolCallCounts.send_email.count).toBe(1);
@@ -167,8 +167,8 @@ describe("StateManager", () => {
         costType: "EXECUTION",
       };
 
-      manager.commitSuccess(llmCall, state);
-      manager.commitSuccess(toolCall, state);
+      manager.commitSuccess(llmCall, state, llmCall.estimatedCost || 0);
+      manager.commitSuccess(toolCall, state, toolCall.estimatedCost || 0);
 
       expect(state.cumulativeCost).toBe(0.5);
       expect(state.cognitionCost).toBe(0.3);
@@ -192,7 +192,12 @@ describe("StateManager", () => {
         tool: "read_file",
       };
 
-      manager.commitSuccess(action, state, undefined, rateLimit);
+      manager.commitSuccess(
+        action,
+        state,
+        action.estimatedCost || 0,
+        rateLimit
+      );
 
       expect(state.callCount).toBe(1); // Reset
       expect(state.windowStart).toBeGreaterThan(Date.now() - 1000);
@@ -214,7 +219,13 @@ describe("StateManager", () => {
         tool: "read_file",
       };
 
-      manager.commitSuccess(action, state, undefined, rateLimit);
+      manager.commitSuccess(
+        action,
+        state,
+        action.estimatedCost || 0,
+        undefined,
+        rateLimit
+      );
 
       expect(state.callCount).toBe(51); // Incremented
       expect(state.windowStart).toBe(windowStart); // Unchanged
@@ -237,7 +248,13 @@ describe("StateManager", () => {
         tool: "send_email",
       };
 
-      manager.commitSuccess(action, state, undefined, undefined, toolRateLimit);
+      manager.commitSuccess(
+        action,
+        state,
+        action.estimatedCost || 0,
+        undefined,
+        toolRateLimit
+      );
 
       expect(state.toolCallCounts.send_email.count).toBe(1); // Reset
     });
@@ -260,7 +277,13 @@ describe("StateManager", () => {
         tool: "send_email",
       };
 
-      manager.commitSuccess(action, state, undefined, undefined, toolRateLimit);
+      manager.commitSuccess(
+        action,
+        state,
+        action.estimatedCost || 0,
+        undefined,
+        toolRateLimit
+      );
 
       expect(state.toolCallCounts.send_email.count).toBe(6); // Incremented
       expect(state.toolCallCounts.send_email.windowStart).toBe(windowStart);

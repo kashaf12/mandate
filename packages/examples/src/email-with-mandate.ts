@@ -1,7 +1,8 @@
-// Agent with real Mandate SDK enforcement
+// Agent with real Mandate SDK (PolicyEngine + StateManager)
 import OpenAI from "openai";
 import { PolicyEngine } from "@mandate/sdk";
-import type { Mandate, Action, AgentState, ToolCall } from "@mandate/sdk/types";
+import { StateManager } from "@mandate/sdk";
+import type { Mandate, Action, ToolCall } from "@mandate/sdk/types";
 
 // The broken tool (same as baseline)
 const sendEmail = {
@@ -63,21 +64,12 @@ const mandate: Mandate = {
   },
 };
 
+// Real SDK components
 const policyEngine = new PolicyEngine();
+const stateManager = new StateManager();
 
-const agentState: AgentState = {
-  agentId: mandate.agentId,
-  mandateId: mandate.id,
-  cumulativeCost: 0,
-  cognitionCost: 0,
-  executionCost: 0,
-  callCount: 0,
-  windowStart: Date.now(),
-  toolCallCounts: {},
-  seenActionIds: new Set(),
-  seenIdempotencyKeys: new Set(),
-  killed: false,
-};
+// Get agent state (StateManager handles initialization)
+const agentState = stateManager.get(mandate.agentId, mandate.id);
 
 async function executeWithMandate(
   action: Action,
@@ -85,7 +77,7 @@ async function executeWithMandate(
 ): Promise<any> {
   console.log(`\n[MANDATE] Evaluating action: ${action.id}`);
 
-  // Phase 1: Authorize (pre-execution check)
+  // Phase 1: Authorize (PolicyEngine pre-execution check)
   const decision = policyEngine.evaluate(action, mandate, agentState);
 
   if (decision.type === "BLOCK") {
@@ -96,17 +88,16 @@ async function executeWithMandate(
   }
 
   console.log(`[MANDATE] ✅ ALLOWED: ${decision.reason}`);
+  if (decision.type === "ALLOW" && decision.remainingCost !== undefined) {
+    console.log(
+      `[MANDATE] 💰 Remaining budget: $${decision.remainingCost.toFixed(2)}`
+    );
+  }
 
   // Phase 2: Execute (tool is called, cost is incurred)
   const result = await toolFn((action as ToolCall).args);
 
-  // Phase 3: Commit state IMMEDIATELY after execution
-  // Agent pays for execution whether verification passes or not
-  agentState.seenActionIds.add(action.id);
-  agentState.cumulativeCost += action.estimatedCost || 0;
-  agentState.callCount += 1;
-
-  // Phase 4: Post-execution verification (optional)
+  // Phase 3: Post-execution verification (before commit)
   const toolPolicy =
     mandate.toolPolicies?.[action.type === "tool_call" ? action.tool : ""];
 
@@ -115,12 +106,25 @@ async function executeWithMandate(
 
     if (!verification.ok) {
       console.log(`[MANDATE] ❌ VERIFICATION FAILED: ${verification.reason}`);
-      // State already committed - agent pays for failed execution
-      throw new Error(`MANDATE_VIOLATION: ${verification.reason}`);
+      // Don't commit state - verification failed
+      throw new Error(`MANDATE_VERIFICATION_FAILED: ${verification.reason}`);
     }
 
     console.log(`[MANDATE] ✅ VERIFICATION PASSED`);
   }
+
+  // Phase 4: Commit state (StateManager handles all mutations)
+  // This ONLY happens if execution succeeded AND verification passed
+  stateManager.commitSuccess(
+    action,
+    agentState,
+    undefined, // No actual cost available in this demo
+    mandate.rateLimit,
+    mandate.toolPolicies?.[action.type === "tool_call" ? action.tool : ""]
+      ?.rateLimit
+  );
+
+  console.log(`[STATE] ✅ State committed`);
 
   return result;
 }
@@ -135,16 +139,19 @@ async function runEmailAgentWithMandate(task: string) {
     { role: "user", content: task },
   ];
 
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`📧 EMAIL AGENT WITH MANDATE SDK`);
-  console.log(`${"=".repeat(60)}`);
+  console.log(`\n${"=".repeat(70)}`);
+  console.log(`📧 EMAIL AGENT WITH MANDATE SDK (PolicyEngine + StateManager)`);
+  console.log(`${"=".repeat(70)}`);
   console.log(`Task: ${task}`);
   console.log(`Mandate: ${mandate.id}`);
   console.log(`Authority: ${mandate.issuer?.type} (${mandate.issuer?.id})`);
   console.log(
     `Scope: ${mandate.scope?.environment} / ${mandate.scope?.service}`
   );
-  console.log(`${"=".repeat(60)}\n`);
+  console.log(
+    `Budget: $${mandate.maxCostTotal} total, $${mandate.maxCostPerCall} per call`
+  );
+  console.log(`${"=".repeat(70)}\n`);
 
   const model = "functiongemma";
   let iteration = 0;
@@ -195,7 +202,7 @@ async function runEmailAgentWithMandate(task: string) {
 
           try {
             const result = await executeWithMandate(action, sendEmail.execute);
-            console.log(`[TOOL] Result:`, result);
+            console.log(`[TOOL] ✅ Result:`, result);
 
             messages.push({
               role: "tool",
@@ -219,13 +226,23 @@ async function runEmailAgentWithMandate(task: string) {
     }
   }
 
-  console.log(`\n${"=".repeat(60)}`);
-  console.log(`📊 FINAL STATE`);
-  console.log(`${"=".repeat(60)}`);
+  console.log(`\n${"=".repeat(70)}`);
+  console.log(`📊 FINAL STATE (via StateManager)`);
+  console.log(`${"=".repeat(70)}`);
   console.log(`Cumulative cost: $${agentState.cumulativeCost.toFixed(2)}`);
+  console.log(`  - Cognition: $${agentState.cognitionCost.toFixed(2)}`);
+  console.log(`  - Execution: $${agentState.executionCost.toFixed(2)}`);
   console.log(`Total calls: ${agentState.callCount}`);
   console.log(`Actions executed: ${agentState.seenActionIds.size}`);
-  console.log(`${"=".repeat(60)}\n`);
+  console.log(`Idempotency keys: ${agentState.seenIdempotencyKeys.size}`);
+  console.log(
+    `Tool call counts:`,
+    Object.keys(agentState.toolCallCounts).length > 0
+      ? agentState.toolCallCounts
+      : "None"
+  );
+  console.log(`Agent killed: ${agentState.killed}`);
+  console.log(`${"=".repeat(70)}\n`);
 }
 
 const task =

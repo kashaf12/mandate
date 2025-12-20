@@ -3,35 +3,31 @@
 // ============================================================================
 
 export interface Mandate {
-  // Version
   version: number;
 
   // Identity
   id: string;
   agentId: string;
   principal?: string;
-
-  // Authority origin (who issued this mandate)
   issuer?: {
     type: "human" | "service" | "system";
     id: string;
-  };
-
-  // Scope (where this authority applies)
-  scope?: {
-    environment?: "dev" | "staging" | "prod";
-    service?: string;
-    region?: string;
   };
 
   // Temporal bounds
   issuedAt: number;
   expiresAt?: number;
 
-  // Agent-level limits
+  // Scope
+  scope?: {
+    environment?: "dev" | "staging" | "prod";
+    service?: string;
+    region?: string;
+  };
+
+  // Cost limits
   maxCostPerCall?: number;
   maxCostTotal?: number;
-  rateLimit?: RateLimit;
 
   // Tool permissions
   allowedTools?: string[];
@@ -39,12 +35,60 @@ export interface Mandate {
 
   // Tool-specific policies
   toolPolicies?: Record<string, ToolPolicy>;
+
+  // Rate limits
+  rateLimit?: RateLimit;
+
+  // Default charging policy (if tool doesn't specify one)
+  defaultChargingPolicy?: ChargingPolicy; // ← NEW
 }
 
 export interface ToolPolicy {
   maxCostPerCall?: number;
   rateLimit?: RateLimit;
   verifyResult?: ResultVerifier;
+}
+
+// ============================================================================
+// CHARGING POLICIES - How to handle cost for different outcomes
+// ============================================================================
+
+export type ChargingPolicy =
+  | {
+      type: "ATTEMPT_BASED";
+      // Charge on execution, regardless of outcome
+      // Use for: AWS Lambda, external APIs, anything that costs money to run
+    }
+  | {
+      type: "SUCCESS_BASED";
+      // Only charge if execution succeeds AND verification passes
+      // Use for: Tools where failed attempts should be free
+    }
+  | {
+      type: "TIERED";
+      // Different charges for different outcomes
+      attemptCost: number; // Charged when execution starts
+      successCost: number; // Additional charge if succeeds
+      verificationCost?: number; // Additional charge if verification passes
+    }
+  | {
+      type: "CUSTOM";
+      // User-defined charging logic
+      compute: (ctx: {
+        action: Action;
+        executed: boolean; // Did execution complete?
+        executionSuccess: boolean; // Did execution succeed (no throw)?
+        verificationSuccess: boolean; // Did verification pass?
+        estimatedCost?: number;
+        actualCost?: number;
+      }) => number; // Returns actual cost to charge
+    };
+
+export interface ToolPolicy {
+  maxCostPerCall?: number;
+  rateLimit?: RateLimit;
+  verifyResult?: ResultVerifier;
+  chargingPolicy?: ChargingPolicy; // ← NEW
 }
 
 export interface RateLimit {
