@@ -3,13 +3,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "example:basic": "tsx src/basic.ts",
-    "example:blocking": "tsx src/blocking.ts",
-    "example:ollama-email": "tsx src/ollama-email.ts",
+    "example:email-baseline": "tsx src/email-baseline.ts",
+    "example:email-mandate": "tsx src/email-with-mandate.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@mandate/sdk": "workspace:*"
+    "@mandate/sdk": "workspace:*",
+    "openai": "^4.77.3"
   },
   "devDependencies": {
     "typescript": "~5.9.3",
