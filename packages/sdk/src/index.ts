@@ -64,3 +64,7 @@ export {
 
 // Kill Switch
 export { KillSwitch } from "./killswitch";
+
+// High-level Client (recommended for most users)
+export { MandateClient } from "./client";
+export type { MandateClientConfig, AuditLoggerConfig } from "./client";

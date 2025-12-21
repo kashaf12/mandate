@@ -215,7 +215,7 @@ async function runEmailAgentWithFullSDK(task: string) {
             });
 
             // Uncomment to test kill switch:
-            // killSwitch.kill(mandate.agentId, mandate.id, 'Too many failures');
+            killSwitch.kill(mandate.agentId, mandate.id, "Too many failures");
           }
         }
       }
