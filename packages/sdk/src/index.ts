@@ -47,6 +47,8 @@ export {
   createToolAction,
   executeLLM,
   executeTool,
+  estimateTokensFromMessages,
+  calculateMaxOutputTokens,
 } from "./helpers";
 
 // Utilities

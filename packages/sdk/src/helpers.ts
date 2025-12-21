@@ -1,6 +1,11 @@
-import { getPricing, estimateCost, calculateCost } from "./pricing";
+import {
+  getPricing,
+  estimateCost,
+  calculateCost,
+  estimateTokens,
+} from "./pricing";
 import { executeWithMandate } from "./executor";
-import type { Action, Mandate, TokenUsage } from "./types";
+import type { Action, Mandate, ModelPricing, TokenUsage } from "./types";
 import type { PolicyEngine } from "./policy";
 import type { StateManager } from "./state";
 import type { AuditLogger } from "./audit";
@@ -139,7 +144,15 @@ export async function executeLLM<T>(
       const pricing = getPricing(action.provider, action.model);
 
       if (pricing) {
-        (result as any).actualCost = calculateCost(usage, pricing);
+        const cost = calculateCost(usage, pricing);
+
+        // Only set actualCost if it's a valid number
+        if (!isNaN(cost) && isFinite(cost)) {
+          (result as any).actualCost = cost;
+        } else {
+          // Free model or calculation error - set to 0
+          (result as any).actualCost = 0;
+        }
       }
     }
   }
@@ -226,4 +239,64 @@ function extractUsage(result: unknown): TokenUsage | null {
   }
 
   return null;
+}
+
+/**
+ * Calculate max output tokens based on remaining budget.
+ *
+ * @param remainingBudget - Budget left
+ * @param inputTokens - Input tokens for this call
+ * @param pricing - Model pricing
+ * @returns Max output tokens that fit in budget
+ */
+export function calculateMaxOutputTokens(
+  remainingBudget: number,
+  inputTokens: number,
+  pricing: ModelPricing,
+  defaultMax: number = 2000
+): number {
+  // Free model - use default
+  if (pricing.inputTokenPrice === 0 && pricing.outputTokenPrice === 0) {
+    return defaultMax;
+  }
+
+  // Cost for input tokens
+  const inputCost = (inputTokens / 1_000_000) * pricing.inputTokenPrice;
+
+  // Remaining budget for output
+  const outputBudget = remainingBudget - inputCost;
+
+  if (outputBudget <= 0) {
+    return 0; // No budget for output
+  }
+
+  // Max output tokens
+  const maxOutputTokens = Math.floor(
+    (outputBudget / pricing.outputTokenPrice) * 1_000_000
+  );
+
+  return maxOutputTokens;
+}
+
+/**
+ * Estimate tokens from chat messages (rough approximation).
+ *
+ * This is a simple heuristic based on JSON stringification.
+ * For production, use tiktoken or the provider's tokenizer.
+ *
+ * @param messages - Array of chat messages
+ * @returns Estimated token count
+ *
+ * @example
+ * ```typescript
+ * const messages = [
+ *   { role: 'system', content: 'You are helpful.' },
+ *   { role: 'user', content: 'Hello!' }
+ * ];
+ * const tokens = estimateTokensFromMessages(messages);
+ * ```
+ */
+export function estimateTokensFromMessages(messages: any[]): number {
+  const text = JSON.stringify(messages);
+  return estimateTokens(text);
 }

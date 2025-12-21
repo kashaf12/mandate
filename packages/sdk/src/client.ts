@@ -10,10 +10,14 @@ import {
 } from "./audit";
 import { executeWithMandate } from "./executor";
 import {
+  estimateTokensFromMessages,
   executeLLM as helperExecuteLLM,
   executeTool as helperExecuteTool,
+  calculateMaxOutputTokens,
+  createLLMAction,
 } from "./helpers";
 import type { Mandate, Action } from "./types";
+import { getPricing } from "./pricing";
 
 /**
  * Audit logger configuration.
@@ -126,6 +130,66 @@ export class MandateClient {
       this.stateManager,
       this.auditLogger
     );
+  }
+
+  /**
+   * Execute an LLM call with automatic budget-based max_tokens.
+   *
+   * This is a convenience method that:
+   * 1. Estimates input tokens from messages
+   * 2. Calculates max output tokens based on remaining budget
+   * 3. Creates LLM action
+   * 4. Executes with enforcement
+   *
+   * @param provider - LLM provider
+   * @param model - Model name
+   * @param messages - Chat messages
+   * @param executor - Function that calls the LLM (receives max_tokens)
+   * @returns LLM response with actualCost injected
+   *
+   * @example
+   * ```typescript
+   * const response = await client.executeLLMWithBudget(
+   *   'openai',
+   *   'gpt-4o',
+   *   messages,
+   *   (maxTokens) => openai.chat.completions.create({
+   *     model: 'gpt-4o',
+   *     messages,
+   *     max_tokens: maxTokens
+   *   })
+   * );
+   * ```
+   */
+  async executeLLMWithBudget<T>(
+    provider: string,
+    model: string,
+    messages: any[],
+    executor: (maxTokens: number) => Promise<T>
+  ): Promise<T> {
+    // Estimate input tokens
+    const inputTokens = estimateTokensFromMessages(messages);
+
+    // Get pricing
+    const pricing = getPricing(provider, model);
+
+    // Calculate max output tokens
+    const remainingBudget = this.getRemainingBudget() || Infinity;
+    const maxOutputTokens = pricing
+      ? calculateMaxOutputTokens(remainingBudget, inputTokens, pricing, 2000)
+      : 2000;
+
+    // Create action
+    const action = createLLMAction(
+      this.mandate.agentId,
+      provider,
+      model,
+      inputTokens,
+      maxOutputTokens
+    );
+
+    // Execute with max_tokens passed to executor
+    return this.executeLLM(action, () => executor(maxOutputTokens));
   }
 
   /**

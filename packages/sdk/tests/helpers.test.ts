@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  calculateMaxOutputTokens,
   createLLMAction,
   createToolAction,
   executeLLM,
   executeTool,
+  estimateTokensFromMessages,
 } from "../src/helpers";
 import { PolicyEngine } from "../src/policy";
 import { StateManager } from "../src/state";
@@ -291,5 +293,149 @@ describe("Helper Functions", () => {
 
       expect(fn).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("calculateMaxOutputTokens", () => {
+  it("calculates max tokens for paid model", () => {
+    const pricing = {
+      inputTokenPrice: 5.0, // $5 per 1M tokens
+      outputTokenPrice: 15.0, // $15 per 1M tokens
+    };
+
+    const maxTokens = calculateMaxOutputTokens(
+      1.0, // $1 budget
+      10000, // 10k input tokens
+      pricing
+    );
+
+    // Input cost: 10000/1M * $5 = $0.05
+    // Remaining: $0.95
+    // Max output: ($0.95 / $15) * 1M = 63,333 tokens
+    expect(maxTokens).toBe(63333);
+  });
+
+  it("returns 0 when budget consumed by input", () => {
+    const pricing = {
+      inputTokenPrice: 5.0,
+      outputTokenPrice: 15.0,
+    };
+
+    const maxTokens = calculateMaxOutputTokens(
+      0.01, // $0.01 budget
+      10000, // 10k input tokens costs $0.05
+      pricing
+    );
+
+    expect(maxTokens).toBe(0);
+  });
+
+  it("returns default for free models", () => {
+    const pricing = {
+      inputTokenPrice: 0,
+      outputTokenPrice: 0,
+    };
+
+    const maxTokens = calculateMaxOutputTokens(1.0, 10000, pricing);
+
+    expect(maxTokens).toBe(2000); // Default
+  });
+
+  it("uses custom default for free models", () => {
+    const pricing = {
+      inputTokenPrice: 0,
+      outputTokenPrice: 0,
+    };
+
+    const maxTokens = calculateMaxOutputTokens(
+      1.0,
+      10000,
+      pricing,
+      5000 // Custom default
+    );
+
+    expect(maxTokens).toBe(5000);
+  });
+
+  it("handles very large budgets", () => {
+    const pricing = {
+      inputTokenPrice: 5.0,
+      outputTokenPrice: 15.0,
+    };
+
+    const maxTokens = calculateMaxOutputTokens(
+      1000.0, // $1000 budget
+      1000, // 1k input tokens
+      pricing
+    );
+
+    expect(maxTokens).toBeGreaterThan(60_000_000);
+  });
+
+  it("handles fractional token results", () => {
+    const pricing = {
+      inputTokenPrice: 5.0,
+      outputTokenPrice: 15.0,
+    };
+
+    const maxTokens = calculateMaxOutputTokens(
+      0.001, // Very small budget
+      100,
+      pricing
+    );
+
+    // Should floor to integer
+    expect(Number.isInteger(maxTokens)).toBe(true);
+  });
+});
+
+describe("estimateTokensFromMessages", () => {
+  it("estimates tokens from OpenAI messages", () => {
+    const messages = [
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "Hello world" },
+    ];
+
+    const tokens = estimateTokensFromMessages(messages);
+
+    expect(tokens).toBeGreaterThan(0);
+    expect(tokens).toBeLessThan(100); // Rough sanity check
+  });
+
+  it("handles empty messages", () => {
+    const tokens = estimateTokensFromMessages([]);
+
+    expect(tokens).toBeGreaterThanOrEqual(0);
+    expect(tokens).toBeLessThan(5); // Very small
+  });
+
+  it("handles complex nested messages", () => {
+    const messages = [
+      {
+        role: "user",
+        content: "Test",
+        tool_calls: [{ id: "1", function: { name: "test", arguments: "{}" } }],
+      },
+    ];
+
+    const tokens = estimateTokensFromMessages(messages);
+
+    expect(tokens).toBeGreaterThan(0);
+  });
+
+  it("estimates more tokens for longer messages", () => {
+    const shortMessages = [{ role: "user", content: "Hi" }];
+    const longMessages = [
+      {
+        role: "user",
+        content:
+          "This is a much longer message with many more words and tokens to count",
+      },
+    ];
+
+    const shortTokens = estimateTokensFromMessages(shortMessages);
+    const longTokens = estimateTokensFromMessages(longMessages);
+
+    expect(longTokens).toBeGreaterThan(shortTokens);
   });
 });
