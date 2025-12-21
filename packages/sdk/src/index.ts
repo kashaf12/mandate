@@ -20,6 +20,14 @@ export type {
   TokenUsage,
 } from "./types";
 
+// Identity (Phase 2)
+export {
+  createAgentIdentity,
+  generateAgentId,
+  validateAgentIdentity,
+  type AgentIdentity
+} from "./identity";
+
 // Charging
 export type { ChargingContext } from "./charging";
 export { evaluateChargingPolicy } from "./charging";
