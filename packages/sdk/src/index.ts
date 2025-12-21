@@ -29,10 +29,7 @@ export {
 } from "./identity";
 
 // Registry (Phase 2)
-export {
-  MemoryAgentRegistry,
-  type AgentRegistry,
-} from "./registry";
+export { MemoryAgentRegistry, type AgentRegistry } from "./registry";
 
 // Charging
 export type { ChargingContext } from "./charging";
