@@ -25,8 +25,14 @@ export {
   createAgentIdentity,
   generateAgentId,
   validateAgentIdentity,
-  type AgentIdentity
+  type AgentIdentity,
 } from "./identity";
+
+// Registry (Phase 2)
+export {
+  MemoryAgentRegistry,
+  type AgentRegistry,
+} from "./registry";
 
 // Charging
 export type { ChargingContext } from "./charging";
