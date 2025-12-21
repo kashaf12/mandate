@@ -5,6 +5,7 @@
   "scripts": {
     "example:email-baseline": "tsx src/email-baseline.ts",
     "example:email-mandate": "tsx src/email-with-mandate.ts",
+    "example:email-simple": "tsx src/email-simple.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
