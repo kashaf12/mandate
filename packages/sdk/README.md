@@ -19,6 +19,8 @@ The Mandate SDK provides TypeScript primitives for enforcing AI agent authority 
   - [Audit Logging](#audit-logging)
   - [Kill Switch](#kill-switch)
 - [Advanced Usage](#advanced-usage)
+  - [Argument Validation (Phase 2)](#argument-validation-phase-2)
+  - [Agent Identity & Mandate Templates (Phase 2)](#agent-identity--mandate-templates-phase-2)
 - [Types Reference](#types-reference)
 - [Examples](#examples)
 - [Testing](#testing)
@@ -877,6 +879,183 @@ const mandate: Mandate = {
     },
   },
 };
+```
+
+---
+
+### Argument Validation (Phase 2)
+
+Validate tool arguments before execution using Zod schemas and custom validation functions:
+
+```typescript
+import { z, CommonSchemas, ValidationPatterns } from "@mandate/sdk";
+
+const mandate: Mandate = {
+  // ...
+  toolPolicies: {
+    read_file: {
+      argumentValidation: {
+        // Zod schema for type validation
+        schema: CommonSchemas.filePath,
+
+        // Custom validation function
+        validate: ValidationPatterns.noSystemPaths,
+      },
+    },
+
+    send_email: {
+      argumentValidation: {
+        schema: CommonSchemas.email,
+        validate: ValidationPatterns.internalEmailOnly("company.com"),
+      },
+    },
+
+    execute_query: {
+      argumentValidation: {
+        schema: CommonSchemas.sqlQuery,
+        validate: ValidationPatterns.readOnlySql,
+      },
+    },
+  },
+};
+```
+
+**Built-in CommonSchemas:**
+
+- `CommonSchemas.filePath` - File path with non-empty validation
+- `CommonSchemas.email` - Email format validation
+- `CommonSchemas.sqlQuery` - SQL query validation
+- `CommonSchemas.apiCall` - API endpoint validation
+
+**Built-in ValidationPatterns:**
+
+- `ValidationPatterns.noSystemPaths` - Block /etc/, /sys/, /proc/, path traversal
+- `ValidationPatterns.internalEmailOnly(domain)` - Only allow specific email domain
+- `ValidationPatterns.readOnlySql` - Block INSERT, UPDATE, DELETE, DROP, ALTER, CREATE
+
+**Custom Zod schemas:**
+
+```typescript
+import { z } from "@mandate/sdk";
+
+const mandate: Mandate = {
+  toolPolicies: {
+    transfer_money: {
+      argumentValidation: {
+        schema: z.object({
+          amount: z.number().max(10000, "Amount exceeds limit"),
+          recipient: z.string().email(),
+        }),
+      },
+    },
+  },
+};
+```
+
+**Custom validation functions:**
+
+```typescript
+{
+  argumentValidation: {
+    validate: (ctx) => {
+      const amount = ctx.args.amount as number;
+      const time = new Date().getHours();
+
+      if (amount > 1000 && (time < 9 || time > 17)) {
+        return {
+          allowed: false,
+          reason: "Large transfers only allowed during business hours",
+        };
+      }
+
+      return { allowed: true };
+    };
+  }
+}
+```
+
+**Combining schema and custom validation:**
+
+Both validations must pass. Schema validation runs first (type checking), then custom validation (business logic).
+
+```typescript
+{
+  argumentValidation: {
+    schema: z.object({
+      path: z.string().min(1)
+    }),
+    validate: (ctx) => {
+      // Custom logic after type validation
+      if (ctx.args.path.includes('secret')) {
+        return { allowed: false, reason: 'Access denied' };
+      }
+      return { allowed: true };
+    }
+  }
+}
+```
+
+---
+
+### Agent Identity & Mandate Templates (Phase 2)
+
+Create mandates with stable agent identities and sensible defaults:
+
+```typescript
+import { createMandate, MandateTemplates } from "@mandate/sdk";
+
+// Using templates (recommended)
+const mandate = MandateTemplates.production("user@example.com", {
+  description: "Email automation agent",
+});
+
+// Custom mandate
+const mandate = createMandate({
+  principal: "user@example.com",
+  description: "Data analysis agent",
+  maxCostTotal: 100.0,
+  allowedTools: ["read_*", "search_*"],
+  expiresInMs: 86400000, // 24 hours
+});
+```
+
+**Available Templates:**
+
+| Template      | Use Case            | Budget | Lifetime  | Tools                        |
+| ------------- | ------------------- | ------ | --------- | ---------------------------- |
+| `restricted`  | Minimal permissions | $1     | 1 hour    | read\_\* only                |
+| `development` | Testing/dev         | $10    | 24 hours  | All except drop\_\*          |
+| `production`  | Production agents   | $100   | No expiry | read*\*, search*\_, send\_\_ |
+| `temporary`   | Short-lived tasks   | $0.50  | 5 minutes | Rate limited (10 calls/min)  |
+
+**Customizing templates:**
+
+```typescript
+const mandate = MandateTemplates.production("user@example.com", {
+  maxCostTotal: 50.0, // Override budget
+  allowedTools: ["read_*", "write_*"], // Override tools
+  deniedTools: ["delete_*"], // Override denies
+  expiresInMs: 3600000, // Add 1 hour expiration
+});
+```
+
+**Agent Identity:**
+
+Every mandate includes an agent identity with:
+
+- Stable `agentId` (persists across restarts)
+- `principal` (owner/responsible party)
+- Optional `description` and `metadata`
+
+```typescript
+const mandate = createMandate({
+  agentId: "email-bot-prod", // Custom stable ID
+  principal: "user@example.com",
+  description: "Production email automation",
+  metadata: { team: "sales", region: "us-east" },
+});
+
+console.log(mandate.identity?.agentId); // 'email-bot-prod'
 ```
 
 ---

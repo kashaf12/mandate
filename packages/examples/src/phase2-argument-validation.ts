@@ -38,6 +38,8 @@ async function main() {
   const mandate: Mandate = {
     ...MandateTemplates.production("user@example.com", {
       description: "Data analysis agent",
+      allowedTools: ["read_*", "search_*", "send_*", "execute_query"],
+      deniedTools: ["delete_*", "drop_*", "alter_*"], // ADD THIS LINE - removes execute_* from deny
     }),
 
     toolPolicies: {
