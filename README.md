@@ -2,7 +2,7 @@
 
 **Runtime enforcement for AI agent authority.**
 
-Mandate SDK is the first layer of [Know Your Agent (KYA)](./VISION.md) infrastructure — making AI agent authority **mechanically enforceable** at runtime, not just prompt-suggested.
+Mandate SDK is the first layer of [Know Your Agent (KYA)](./docs/VISION.md) infrastructure — making AI agent authority **mechanically enforceable** at runtime, not just prompt-suggested.
 
 <div align="center">
 
@@ -10,7 +10,7 @@ Mandate SDK is the first layer of [Know Your Agent (KYA)](./VISION.md) infrastru
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
-[Quick Start](#quick-start) · [Why Mandate?](#why-mandate) · [Examples](#examples) · [Documentation](./packages/sdk/README.md) · [Roadmap](#roadmap)
+[Quick Start](#quick-start) · [Why Mandate?](#why-mandate) · [Examples](./packages/examples) · [Documentation](./packages/sdk/README.md) · [Roadmap](#roadmap)
 
 </div>
 
@@ -27,30 +27,21 @@ Mandate SDK is the first layer of [Know Your Agent (KYA)](./VISION.md) infrastru
 
 **Prompts are suggestions. Enforcement is mechanical.**
 
-### A Real Example: The Email That Never Sent
+### What Goes Wrong
 
-```typescript
-// Agent calls email API
-const result = await sendEmail({ to: "user@example.com", subject: "Invoice" });
+Without mechanical enforcement:
 
-// API returns: { status: 'accepted', messageId: 'msg-123' }
-// Agent thinks: "Success! ✅"
-
-// Reality: Email stuck in spam filter, never delivered ❌
-```
-
-**Without verification and enforcement:**
-
-- Agent reports success when it failed
-- Budget is consumed for failed operations
-- No audit trail of what actually happened
-- No way to prevent runaway costs
+1. **Budget Runaway** - Agent in a loop burns through $500 before you notice
+2. **Retry Storms** - Transient error triggers 1000+ retries, each costing money
+3. **Tool Abuse** - Agent calls dangerous tools (`delete_*`, `execute_*`) because LLM hallucinated them
+4. **No Accountability** - "The agent did it" — but which one? Who owns it? What actually happened?
+5. **Silent Failures** - Tool returns success but failed (email accepted, not delivered)
 
 ---
 
 ## The Solution
 
-**Mandate SDK enforces authority at runtime** through a two-phase execution model:
+**Mandate SDK enforces authority at runtime** through a layered execution model:
 
 ```typescript
 import { MandateClient, createToolAction } from "@mandate/sdk";
@@ -63,18 +54,18 @@ const client = new MandateClient({
     agentId: "email-agent",
     issuedAt: Date.now(),
 
-    // Limits
-    maxCostTotal: 10.0,
-    allowedTools: ["send_email"],
+    // Hard limits
+    maxCostTotal: 10.0, // $10 total budget
+    allowedTools: ["send_email"], // Only this tool
 
-    // Verification (proves execution actually worked)
     toolPolicies: {
       send_email: {
-        verifyResult: (ctx) => {
-          if (!ctx.result.deliveryConfirmed) {
-            return { ok: false, reason: "Email not delivered" };
-          }
-          return { ok: true };
+        rateLimit: {
+          maxCalls: 5, // Max 5 attempts
+          windowMs: 60_000, // Per minute
+        },
+        chargingPolicy: {
+          type: "ATTEMPT_BASED", // Charge even on failure
         },
       },
     },
@@ -91,60 +82,77 @@ const action = createToolAction("email-agent", "send_email", {
 try {
   await client.executeTool(action, () => sendEmail());
 } catch (error) {
-  // Blocked: "Email not delivered"
-  // Agent knows it failed
-  // Budget not consumed
-  // Audit trail created
+  // Blocked if:
+  // - Budget exceeded
+  // - Rate limit hit
+  // - Tool not allowed
+  // - Agent killed
 }
 ```
 
 **What just happened:**
 
 1. ✅ **Authorization** - Policy checked before execution
-2. ✅ **Execution** - Tool called
-3. ✅ **Verification** - Result validated against requirements
-4. ✅ **Accounting** - Cost only charged if verification passes
-5. ✅ **Audit** - Every decision logged with reason
+2. ✅ **Execution** - Tool called only if allowed
+3. ✅ **Settlement** - Cost reconciled (estimated vs actual)
+4. ✅ **Accounting** - Budget updated (commit-after-success)
+5. ✅ **Audit** - Decision logged with reason
 
 ---
 
 ## Why Mandate?
 
-### For AI Engineers
+### The Core Insight
 
-**Before Mandate:**
+> The moment an agent can act in the real world, it must be governable at the **identity level** — not the server level, not the prompt level.
+
+**Enforcement must be:**
+
+- ✅ **Mechanical** - Not AI judgment, not prompt-based
+- ✅ **Deterministic** - Same input = same output, always
+- ✅ **Explainable** - Every decision has a reason
+- ✅ **Fail-closed** - Unknown = denied
+
+### What Mandate Enforces
+
+Mandate enforces **mechanical invariants**, not business outcomes:
+
+| ✅ Good (Mechanical)         | ❌ Bad (Subjective)         |
+| ---------------------------- | --------------------------- |
+| Agent exceeded budget        | User didn't read the email  |
+| Tool called 100x in 1 minute | Email went to spam          |
+| Agent called unapproved tool | Customer didn't buy product |
+| Budget would be exceeded     | User seemed unhappy         |
+
+**Mandate enforces execution and authority — not business truth.**
+
+### For Different Audiences
+
+**For AI Engineers:**
 
 ```typescript
-// Hope the agent stays within budget
+// Before: Hope agent stays in budget
 const response = await openai.chat.completions.create({...});
-// 🤞 Fingers crossed it doesn't loop
-```
+// 🤞 Fingers crossed
 
-**With Mandate:**
-
-```typescript
-// Enforce budget mechanically
+// After: Budget mechanically enforced
 const response = await client.executeLLMWithBudget(
-  "openai",
-  "gpt-4o",
-  messages,
+  'openai', 'gpt-4o', messages,
   (maxTokens) => openai.chat.completions.create({ max_tokens: maxTokens })
 );
 // 🛡️ Cannot exceed budget (provider enforces max_tokens)
 ```
 
-### For Product Teams
+**For Product Teams:**
 
-| Without Mandate                         | With Mandate                    |
-| --------------------------------------- | ------------------------------- |
-| "Agent went into a loop and spent $500" | Budget enforced: blocked at $10 |
-| "Not sure which agent did what"         | Full audit trail with agent IDs |
-| "Can't explain why action was blocked"  | Every decision has a reason     |
-| "Agent thought it succeeded but failed" | Verification proves success     |
+| Without Mandate                          | With Mandate                    |
+| ---------------------------------------- | ------------------------------- |
+| "Agent went into a loop and spent $500"  | Budget enforced: blocked at $10 |
+| "Not sure which agent did what"          | Full audit trail with agent IDs |
+| "Can't explain why action was blocked"   | Every decision has a reason     |
+| "Agent retried 1000x on transient error" | Rate limit stopped it at 5      |
 
-### For Enterprises
-
-**Mandate provides the primitives for:**
+**For Enterprises:**
 
 - ✅ **Compliance** - Auditable decisions with structured logs
 - ✅ **Risk Management** - Hard limits on cost, rate, scope
@@ -163,7 +171,7 @@ npm install @mandate/sdk
 pnpm add @mandate/sdk
 ```
 
-### Simple Example
+### 60-Second Example
 
 ```typescript
 import { MandateClient, createToolAction } from "@mandate/sdk";
@@ -176,7 +184,7 @@ const client = new MandateClient({
     agentId: "my-agent",
     issuedAt: Date.now(),
     maxCostTotal: 10.0,
-    allowedTools: ["*"], // Allow all tools
+    allowedTools: ["read_*", "search_*"], // Glob patterns supported
   },
 });
 
@@ -193,7 +201,7 @@ console.log("Cost:", client.getCost());
 console.log("Remaining:", client.getRemainingBudget());
 ```
 
-**That's it. Your agent is now enforceable.**
+**See [examples](./packages/examples) for real-world scenarios with LLM agents.**
 
 ---
 
@@ -220,7 +228,7 @@ interface Mandate {
   rateLimit?: { maxCalls: number; windowMs: number };
 
   // Permissions
-  allowedTools?: string[]; // Whitelist (supports glob patterns)
+  allowedTools?: string[]; // Whitelist (glob patterns: *, read_*)
   deniedTools?: string[]; // Blacklist (takes precedence)
 
   // Tool-specific policies
@@ -230,11 +238,15 @@ interface Mandate {
       maxCostPerCall?: number;
       rateLimit?: RateLimit;
       chargingPolicy?: ChargingPolicy;
-      verifyResult?: (ctx) => VerificationDecision;
     }
   >;
+
+  // Custom pricing (optional)
+  customPricing?: ProviderPricing;
 }
 ```
+
+**Tool patterns support simple glob matching** (`*`, `prefix_*`, `*_suffix`), evaluated deterministically. No regex.
 
 ### Enforcement Flow
 
@@ -245,39 +257,47 @@ interface Mandate {
          │
          ▼
 ┌─────────────────┐
-│  Authorization  │ ◄─── PolicyEngine evaluates mandate
-│  (pre-flight)   │      - Kill switch?
-└────────┬────────┘      - Expired?
+│  Authorization  │ ◄─── PolicyEngine (pure function, <1ms)
+│  (pre-flight)   │      - Replay check (idempotency)
+└────────┬────────┘      - Kill switch?
+         │               - Expired?
          │               - Tool allowed?
-         │               - Budget OK?
-         ▼               - Rate limit OK?
-     ┌───────┐
+         ▼               - Budget OK?
+     ┌───────┐          - Rate limit OK?
      │ ALLOW │
      └───┬───┘
          │
          ▼
 ┌─────────────────┐
 │   Execution     │ ◄─── Your function executes
-└────────┬────────┘
+└────────┬────────┘      (can fail)
          │
          ▼
 ┌─────────────────┐
-│  Verification   │ ◄─── Optional: validate result
-│   (optional)    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   Accounting    │ ◄─── Charging policy determines cost
-│ (commit state)  │      - SUCCESS_BASED: only charge on success
-└────────┬────────┘      - ATTEMPT_BASED: charge on attempt
+│   Settlement    │ ◄─── Reconcile estimated vs actual cost
+│ & Accounting    │      Charging policy determines cost
+└────────┬────────┘      - SUCCESS_BASED: only charge on success
+         │               - ATTEMPT_BASED: charge on attempt
          │               - TIERED: different rates
-         │               - CUSTOM: your logic
+         ▼               - CUSTOM: your logic (must be pure)
+┌─────────────────┐
+│  Commit State   │ ◄─── State only mutates after success
+│                 │      (retry-safe, no double-charging)
+└────────┬────────┘
+         │
          ▼
 ┌─────────────────┐
 │  Audit Log      │ ◄─── Every decision logged
-└─────────────────┘
+└─────────────────┘      (structured, parseable)
 ```
+
+**Key phases:**
+
+1. **Authorization** - Pure evaluation (no state mutation)
+2. **Execution** - Can fail (network, API errors)
+3. **Settlement** - Reconcile actual vs estimated cost
+4. **Accounting** - State committed only after success
+5. **Audit** - Decision logged with full context
 
 ### Charging Policies
 
@@ -296,17 +316,16 @@ interface Mandate {
       chargingPolicy: { type: 'SUCCESS_BASED' }
     },
 
-    // Tiered pricing (email service)
+    // Tiered pricing
     send_email_bulk: {
       chargingPolicy: {
         type: 'TIERED',
         attemptCost: 0.001,      // Charged for trying
         successCost: 0.01,       // Additional if succeeds
-        verificationCost: 0.005  // Additional if verified
       }
     },
 
-    // Custom logic
+    // Custom logic (must be pure, deterministic, side-effect free)
     custom_tool: {
       chargingPolicy: {
         type: 'CUSTOM',
@@ -320,128 +339,48 @@ interface Mandate {
 }
 ```
 
----
+**CRITICAL:** Charging policies must be pure, deterministic, and side-effect free. They are evaluated synchronously during settlement.
 
-## Examples
+### Custom Pricing
 
-### 1. Basic Tool Execution
+**Mandate uses flexible pricing:**
 
-```typescript
-const client = new MandateClient({
-  mandate: {
-    version: 1,
-    id: "mandate-basic",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-    allowedTools: ["read_*", "search"],
-  },
-});
-
-const action = createToolAction("agent-1", "read_file", { path: "/data.txt" });
-const result = await client.executeTool(action, () => readFile("/data.txt"));
-```
-
-### 2. LLM with Budget Enforcement
+1. **Built-in pricing** - Major providers (OpenAI, Anthropic, Groq)
+2. **Custom pricing** - Your models/rates (overrides defaults)
+3. **Wildcard pricing** - Provider-wide (`ollama/*` = free)
+4. **No pricing = $0** - Free/local models (with warning)
 
 ```typescript
-const client = new MandateClient({
-  mandate: {
-    version: 1,
-    id: "mandate-llm",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-    maxCostTotal: 5.0, // $5 budget
-  },
-});
-
-// Automatically calculates max_tokens from remaining budget
-const response = await client.executeLLMWithBudget(
-  "openai",
-  "gpt-4o",
-  messages,
-  (maxTokens) =>
-    openai.chat.completions.create({
-      model: "gpt-4o",
-      messages,
-      max_tokens: maxTokens, // Enforced by OpenAI
-    })
-);
-```
-
-### 3. Result Verification
-
-```typescript
-const client = new MandateClient({
-  mandate: {
-    version: 1,
-    id: "mandate-verify",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-    toolPolicies: {
-      send_email: {
-        // Verify email was actually delivered
-        verifyResult: (ctx) => {
-          const result = ctx.result as EmailResult;
-
-          if (!result.deliveryConfirmed) {
-            return {
-              ok: false,
-              reason: "Email accepted but not delivered",
-            };
-          }
-
-          return { ok: true };
-        },
-      },
+{
+  customPricing: {
+    // Local model with internal cost
+    ollama: {
+      'llama3.1:8b': {
+        inputTokenPrice: 0.01,   // $0.01 per 1M tokens
+        outputTokenPrice: 0.02
+      }
     },
-  },
-});
 
-try {
-  await client.executeTool(action, () => sendEmail());
-} catch (error) {
-  // Throws if verification fails
-  // State not committed (no charge)
+    // Override default pricing
+    openai: {
+      'gpt-4o': {
+        inputTokenPrice: 2.0,   // Negotiated rate
+        outputTokenPrice: 8.0
+      }
+    },
+
+    // Wildcard for custom provider
+    'my-company': {
+      '*': {
+        inputTokenPrice: 5.0,
+        outputTokenPrice: 15.0
+      }
+    }
+  }
 }
 ```
 
-### 4. Kill Switch
-
-```typescript
-const client = new MandateClient({
-  mandate: {
-    /* ... */
-  },
-});
-
-// Emergency stop
-client.kill("Detected infinite loop");
-
-// All subsequent actions blocked
-await client.executeTool(action, fn); // Throws: "Agent killed"
-```
-
-### 5. Audit Trail
-
-```typescript
-const client = new MandateClient({
-  mandate: {
-    /* ... */
-  },
-  auditLogger: "memory", // Store in memory
-});
-
-// Execute some actions
-await client.executeTool(action1, fn1);
-await client.executeTool(action2, fn2);
-
-// Inspect audit trail
-const entries = client.getAuditEntries();
-entries.forEach((entry) => {
-  console.log(`${entry.decision}: ${entry.reason}`);
-  console.log(`Cost: $${entry.actualCost}`);
-});
-```
+**Mandate computes the budget bound; the provider enforces it** (via `max_tokens`).
 
 ---
 
@@ -451,7 +390,7 @@ Mandate SDK is built in **8 layers**:
 
 1. **Types + Policy Engine** - Authorization logic (pure functions)
 2. **State Management** - Commit-after-success pattern
-3. **Two-Phase Executor** - Authorize → Execute → Verify → Commit
+3. **Two-Phase Executor** - Authorize → Execute → Settle → Commit
 4. **Cost Estimation** - Dynamic pricing for LLM providers
 5. **Helper Functions** - Clean DX without wrapper complexity
 6. **Audit Logging** - Structured decision trail
@@ -467,7 +406,63 @@ Mandate SDK is built in **8 layers**:
 - ✅ **Zero dependencies** - Core SDK has no deps
 - ✅ **Testable** - 173 passing tests
 
-See [Architecture Guide](./ARCHITECTURE.md) for details.
+See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
+
+---
+
+## Phase 1 Limitations (Important)
+
+### Authority Scope
+
+**In Phase 1, Mandate enforces limits per SDK instance, not globally.**
+
+If the same agent runs on multiple processes or servers:
+
+- Budgets are enforced independently
+- Costs may multiply across deployments
+- Rate limits are per-process
+
+**This is intentional and addressed in Phase 3 (Distributed Authority).**
+
+Example:
+
+```
+Agent "email-agent" deployed on 5 servers
+Mandate: maxCostTotal = $10
+
+Reality in Phase 1:
+- Each server enforces $10 independently
+- Agent could spend $50 total (5 × $10)
+
+Phase 3 will add:
+- Global per-agent limits
+- Distributed state coordination
+- Shared accounting
+```
+
+### Kill Switch Scope
+
+**The kill switch is local to the MandateClient instance in Phase 1.**
+
+```typescript
+client.kill("Detected loop"); // Only affects this client instance
+```
+
+Global `killAll()` requires centralized agent registry (Phase 3).
+
+### What Phase 1 Actually Guarantees
+
+Mandate enforces authority **deterministically**, but accounting and settlement are only as accurate as the signals provided by tools and providers. The SDK is fail-closed, not omniscient.
+
+**What this means:**
+
+- ✅ Enforcement is mechanical and correct
+- ✅ Policy evaluation is deterministic
+- ⚠️ Cost accuracy depends on provider reporting
+- ⚠️ Verification depends on tool contracts
+- ⚠️ Providers can lie or lag
+
+**Mandate makes the best decision possible with available information.**
 
 ---
 
@@ -475,15 +470,16 @@ See [Architecture Guide](./ARCHITECTURE.md) for details.
 
 ### Phase 1: Mandate SDK (✅ Current)
 
-**Status: Complete**
+**Status: Complete (December 2024)**
 
 - ✅ Runtime enforcement
-- ✅ Cost tracking
-- ✅ Tool permissions
-- ✅ Rate limiting
+- ✅ Cost tracking (LLM + tools)
+- ✅ Tool permissions (allowlist/denylist)
+- ✅ Rate limiting (agent-level, tool-level)
 - ✅ Kill switch
 - ✅ Audit logging
-- ✅ Charging policies
+- ✅ Charging policies (4 types)
+- ✅ Custom pricing
 - ✅ Result verification
 
 **Limitations:**
@@ -548,6 +544,25 @@ Each phase solves one or more of these invariants.
 
 ---
 
+## Examples
+
+See [packages/examples](./packages/examples) for complete working examples:
+
+- **Email Agent** - Basic enforcement with verification
+- **Retry Storm** - Rate limiting prevents infinite loops (simulated + real LLM)
+- **Budget Runaway** - Cost limits prevent overspending
+- **Tool Permissions** - Allowlist/denylist enforcement
+- **Tool Hallucination** - Real LLM calling dangerous tools (Ollama)
+- **Custom Pricing** - 4 pricing scenarios
+
+All examples include:
+
+- ❌ Without Mandate (showing the problem)
+- ✅ With Mandate (showing enforcement)
+- Real LLM agents (Ollama) where applicable
+
+---
+
 ## Contributing
 
 We welcome contributions! See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
@@ -569,11 +584,12 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ## Learn More
 
-- 📖 [Full Documentation](./packages/sdk/README.md)
-- 🎯 [Vision: Know Your Agent](./VISION.md)
-- 🏗️ [Architecture](./ARCHITECTURE.md)
-- 📝 [Glossary](./GLOSSARY.md)
-- 🚀 [Examples](./packages/examples/README.md)
+- 📖 [Full SDK Documentation](./packages/sdk/README.md)
+- 🎯 [Vision: Know Your Agent](./docs/VISION.md)
+- 🏗️ [Architecture Guide](./docs/ARCHITECTURE.md)
+- 📚 [Glossary of Terms](./docs/GLOSSARY.md)
+- 🚀 [Example Code](./packages/examples)
+- 📊 [Authority Model](./docs/AUTHORITY_MODEL.md)
 
 ---
 
@@ -592,5 +608,3 @@ MIT License - see [LICENSE](./LICENSE) for details.
 _Making agent authority mechanically enforceable_
 
 </div>
-
----

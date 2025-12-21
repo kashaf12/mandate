@@ -23,5 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 .cursor
-docs
+docs-internal
 .pnpm-store
