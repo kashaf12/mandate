@@ -31,6 +31,19 @@ export {
 // Registry (Phase 2)
 export { MemoryAgentRegistry, type AgentRegistry } from "./registry";
 
+// Validation (Phase 2)
+export {
+  validateSchema,
+  ValidationPatterns,
+  CommonSchemas,
+  type ValidationContext,
+  type ValidationResult,
+  type ArgumentValidation,
+} from "./validation";
+
+// Re-export Zod for user convenience
+export { z } from "zod";
+
 // Charging
 export type { ChargingContext } from "./charging";
 export { evaluateChargingPolicy } from "./charging";

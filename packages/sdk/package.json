@@ -53,6 +53,9 @@
     "prepublishOnly": "pnpm build && pnpm test",
     "clean": "rm -rf dist"
   },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^1.0.0",
