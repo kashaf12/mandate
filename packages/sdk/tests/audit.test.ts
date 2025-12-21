@@ -56,12 +56,26 @@ describe("Audit Loggers", () => {
     it("does not throw on logging errors", () => {
       const logger = new ConsoleAuditLogger();
 
+      // Mock console.error to suppress stderr noise
+      const originalError = console.error;
+      const errorCalls: any[] = [];
+      console.error = (...args: any[]) => {
+        errorCalls.push(args);
+      };
+
       // Create an object that can't be JSON stringified
       const circularEntry = { ...mockEntry } as any;
       circularEntry.circular = circularEntry;
 
       // Should not throw
       expect(() => logger.log(circularEntry)).not.toThrow();
+
+      // Verify error was caught (but not thrown)
+      expect(errorCalls.length).toBeGreaterThan(0);
+      expect(errorCalls[0][0]).toBe("[AUDIT ERROR]");
+
+      // Restore
+      console.error = originalError;
     });
   });
 
