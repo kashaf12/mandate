@@ -1,6 +1,14 @@
 // Simplified example using MandateClient
 import OpenAI from "openai";
-import { MandateClient, createToolAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createLLMAction,
+  createToolAction,
+  estimateTokens,
+  getPricing,
+  calculateMaxOutputTokens,
+  type Mandate,
+} from "@mandate/sdk";
 
 // The broken tool (same as before)
 const sendEmail = {
@@ -97,12 +105,26 @@ async function runSimpleEmailAgent(task: string) {
       break;
     }
 
-    const response = await openai.chat.completions.create({
-      model: "functiongemma",
+    console.log(
+      `[AGENT] 🧠 LLM call (budget: $${client
+        .getRemainingBudget()
+        ?.toFixed(2)})`
+    );
+
+    // ✨ ONE LINE - client handles everything
+    const response = await client.executeLLMWithBudget(
+      "ollama",
+      "functiongemma",
       messages,
-      tools: [SEND_EMAIL_TOOL],
-      tool_choice: "auto",
-    });
+      (maxTokens) =>
+        openai.chat.completions.create({
+          model: "functiongemma",
+          messages,
+          tools: [SEND_EMAIL_TOOL],
+          tool_choice: "auto",
+          max_tokens: maxTokens, // Automatically calculated
+        })
+    );
 
     const message = response.choices[0]?.message;
     if (!message) break;
