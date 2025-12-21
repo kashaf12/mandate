@@ -97,6 +97,25 @@ export interface RateLimit {
 }
 
 // ============================================================================
+// COST ESTIMATION - Dynamic pricing for LLM providers
+// ============================================================================
+
+export interface ModelPricing {
+  inputTokenPrice: number; // Price per 1M input tokens
+  outputTokenPrice: number; // Price per 1M output tokens
+}
+
+export interface ProviderPricing {
+  [modelName: string]: ModelPricing;
+}
+
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+// ============================================================================
 // VERIFICATION - Post-execution result checking
 // ============================================================================
 
