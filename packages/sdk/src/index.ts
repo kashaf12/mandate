@@ -31,6 +31,13 @@ export {
 // Registry (Phase 2)
 export { MemoryAgentRegistry, type AgentRegistry } from "./registry";
 
+// Mandate Factory (Phase 2)
+export {
+  createMandate,
+  MandateTemplates,
+  type MandateOptions,
+} from "./mandate-factory";
+
 // Validation (Phase 2)
 export {
   validateSchema,
