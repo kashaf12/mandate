@@ -2,6 +2,8 @@
 // MANDATE - The authority envelope
 // ============================================================================
 
+import type { AgentIdentity } from "./identity";
+
 export interface Mandate {
   version: number;
 
@@ -9,6 +11,7 @@ export interface Mandate {
   id: string;
   agentId: string;
   principal?: string;
+  identity?: AgentIdentity; // NEW - Phase 2: Full agent identity
   issuer?: {
     type: "human" | "service" | "system";
     id: string;
