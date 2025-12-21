@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 .cursor
 docs
+.pnpm-store
