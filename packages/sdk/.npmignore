@@ -1,0 +1,21 @@
+# Source files (only ship dist/)
+src/
+tests/
+*.test.ts
+
+# Config files
+tsconfig.json
+vitest.config.ts
+.gitignore
+
+# Development
+node_modules/
+coverage/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

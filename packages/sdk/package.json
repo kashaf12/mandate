@@ -1,6 +1,35 @@
 {
   "name": "@mandate/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Runtime enforcement for AI agent authority - mechanically enforce budgets, permissions, and rate limits",
+  "author": "Kashaf Ahmed <kashafaahmed@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/kashaf12/mandate#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kashaf12/mandate-sdk.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/mandate-dev/mandate-sdk/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "llm",
+    "authorization",
+    "enforcement",
+    "governance",
+    "budget",
+    "rate-limiting",
+    "cost-tracking",
+    "audit",
+    "kya",
+    "mandate",
+    "policy-engine",
+    "security",
+    "typescript"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -8,22 +37,37 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
-    "type-check": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "pnpm build && pnpm test",
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "@types/node": "^22.19.3",
-    "vitest": "^2.1.9"
+    "@types/node": "^20.10.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "openai": "^4.20.0"
+  },
+  "peerDependenciesMeta": {
+    "openai": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
