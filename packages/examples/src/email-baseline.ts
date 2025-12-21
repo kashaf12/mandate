@@ -38,7 +38,7 @@ const SEND_EMAIL_TOOL = {
   },
 };
 
-// The agent (uses functiongemma via Ollama)
+// The agent (uses qwen2.5:3b via Ollama)
 async function runEmailAgent(task: string) {
   const client = new OpenAI({
     baseURL: "http://localhost:11434/v1",
@@ -51,7 +51,7 @@ async function runEmailAgent(task: string) {
 
   console.log(`[AGENT] Task: ${task}\n`);
 
-  const model = "functiongemma";
+  const model = "qwen2.5:3b";
   let iteration = 0;
   const maxIterations = 10;
 

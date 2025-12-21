@@ -134,7 +134,7 @@ async function runEmailAgentWithFullSDK(task: string) {
   console.log(`Audit: Console + Memory (${memoryLogger.count()} entries)`);
   console.log(`${"=".repeat(80)}\n`);
 
-  const model = "functiongemma";
+  const model = "qwen2.5:3b";
   let iteration = 0;
   const maxIterations = 10;
 

@@ -37,7 +37,7 @@ export class KillSwitch {
    * killSwitch.killAll('System maintenance');
    * ```
    */
-  killAll(reason?: string): void {
+  killAll(_reason?: string): void {
     // This is a limitation of Phase 1: we don't track all agents
     // In Phase 3, this would query a central registry
     throw new Error(

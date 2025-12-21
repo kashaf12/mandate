@@ -69,6 +69,7 @@ export function evaluateChargingPolicy(
     default:
       // TypeScript exhaustiveness check
       const _exhaustive: never = policy;
+      void _exhaustive; // Ensure variable is used
       return 0;
   }
 }

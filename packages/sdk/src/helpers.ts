@@ -5,7 +5,13 @@ import {
   estimateTokens,
 } from "./pricing";
 import { executeWithMandate } from "./executor";
-import type { Action, Mandate, ModelPricing, TokenUsage } from "./types";
+import type {
+  Action,
+  Mandate,
+  ModelPricing,
+  ProviderPricing,
+  TokenUsage,
+} from "./types";
 import type { PolicyEngine } from "./policy";
 import type { StateManager } from "./state";
 import type { AuditLogger } from "./audit";
@@ -25,22 +31,18 @@ function generateActionId(prefix: string): string {
  * @param model - Model name
  * @param estimatedInputTokens - Estimated input tokens
  * @param estimatedOutputTokens - Estimated output tokens
+ * @param customPricing - Optional custom pricing (overrides defaults)
  * @returns LLM action ready for execution
- *
- * @example
- * ```typescript
- * const action = createLLMAction('agent-1', 'openai', 'gpt-4o', 1000, 500);
- * const result = await executeLLM(action, () => openai.chat.completions.create({...}));
- * ```
  */
 export function createLLMAction(
   agentId: string,
   provider: "openai" | "anthropic" | "ollama" | string,
   model: string,
   estimatedInputTokens: number,
-  estimatedOutputTokens: number
+  estimatedOutputTokens: number,
+  customPricing?: ProviderPricing
 ): Action {
-  const pricing = getPricing(provider, model);
+  const pricing = getPricing(provider, model, customPricing);
 
   return {
     type: "llm_call",
@@ -51,7 +53,7 @@ export function createLLMAction(
     model,
     estimatedCost: pricing
       ? estimateCost(estimatedInputTokens, estimatedOutputTokens, pricing)
-      : 0,
+      : 0, // Default to $0 if no pricing found
     costType: "COGNITION",
   };
 }
@@ -141,7 +143,12 @@ export async function executeLLM<T>(
   if (action.type === "llm_call") {
     const usage = extractUsage(result);
     if (usage && action.provider && action.model) {
-      const pricing = getPricing(action.provider, action.model);
+      // Use custom pricing from mandate if available
+      const pricing = getPricing(
+        action.provider,
+        action.model,
+        mandate.customPricing
+      );
 
       if (pricing) {
         const cost = calculateCost(usage, pricing);

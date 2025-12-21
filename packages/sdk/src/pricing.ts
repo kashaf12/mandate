@@ -1,64 +1,36 @@
-import type { ProviderPricing, ModelPricing, TokenUsage } from "./types";
+import type { ModelPricing, ProviderPricing } from "./types";
 
 /**
- * Default pricing database for major LLM providers.
- * Prices are per 1M tokens (as of December 2024).
+ * Default pricing for major LLM providers.
  *
- * Sources:
- * - OpenAI: https://openai.com/pricing
- * - Anthropic: https://www.anthropic.com/pricing
+ * IMPORTANT: This is a convenience, not a complete database.
+ *
+ * For production:
+ * 1. Use customPricing in Mandate for accurate costs
+ * 2. Pricing changes frequently - verify with provider
+ * 3. Missing models default to $0 (free/local assumed)
+ *
+ * Prices are per 1M tokens (input/output).
+ * Last updated: December 2024
  */
-export const DEFAULT_PRICING: Record<string, ProviderPricing> = {
+export const DEFAULT_PRICING: ProviderPricing = {
   openai: {
     // GPT-4 family
-    "gpt-4": {
-      inputTokenPrice: 30.0,
-      outputTokenPrice: 60.0,
-    },
-    "gpt-4-turbo": {
-      inputTokenPrice: 10.0,
-      outputTokenPrice: 30.0,
-    },
-    "gpt-4-turbo-preview": {
-      inputTokenPrice: 10.0,
-      outputTokenPrice: 30.0,
-    },
-    "gpt-4o": {
-      inputTokenPrice: 2.5,
-      outputTokenPrice: 10.0,
-    },
-    "gpt-4o-mini": {
-      inputTokenPrice: 0.15,
-      outputTokenPrice: 0.6,
-    },
+    "gpt-4o": { inputTokenPrice: 2.5, outputTokenPrice: 10.0 },
+    "gpt-4o-mini": { inputTokenPrice: 0.15, outputTokenPrice: 0.6 },
+    "gpt-4-turbo": { inputTokenPrice: 10.0, outputTokenPrice: 30.0 },
+    "gpt-4": { inputTokenPrice: 30.0, outputTokenPrice: 60.0 },
 
-    // GPT-3.5 family
-    "gpt-3.5-turbo": {
-      inputTokenPrice: 0.5,
-      outputTokenPrice: 1.5,
-    },
-    "gpt-3.5-turbo-instruct": {
-      inputTokenPrice: 1.5,
-      outputTokenPrice: 2.0,
-    },
+    // GPT-3.5
+    "gpt-3.5-turbo": { inputTokenPrice: 0.5, outputTokenPrice: 1.5 },
 
-    // O1 family
-    o1: {
-      inputTokenPrice: 15.0,
-      outputTokenPrice: 60.0,
-    },
-    "o1-mini": {
-      inputTokenPrice: 3.0,
-      outputTokenPrice: 12.0,
-    },
-    "o1-preview": {
-      inputTokenPrice: 15.0,
-      outputTokenPrice: 60.0,
-    },
+    // O1 (reasoning models)
+    o1: { inputTokenPrice: 15.0, outputTokenPrice: 60.0 },
+    "o1-mini": { inputTokenPrice: 3.0, outputTokenPrice: 12.0 },
   },
 
   anthropic: {
-    // Claude 3.5 family
+    // Claude 3.5
     "claude-3-5-sonnet-20241022": {
       inputTokenPrice: 3.0,
       outputTokenPrice: 15.0,
@@ -72,11 +44,8 @@ export const DEFAULT_PRICING: Record<string, ProviderPricing> = {
       outputTokenPrice: 4.0,
     },
 
-    // Claude 3 family
-    "claude-3-opus-20240229": {
-      inputTokenPrice: 15.0,
-      outputTokenPrice: 75.0,
-    },
+    // Claude 3
+    "claude-3-opus-20240229": { inputTokenPrice: 15.0, outputTokenPrice: 75.0 },
     "claude-3-sonnet-20240229": {
       inputTokenPrice: 3.0,
       outputTokenPrice: 15.0,
@@ -87,25 +56,86 @@ export const DEFAULT_PRICING: Record<string, ProviderPricing> = {
     },
   },
 
-  // Ollama models are free (local)
+  // Local/free models - explicitly $0
   ollama: {
-    // Default pricing for any Ollama model
-    "*": {
-      inputTokenPrice: 0,
-      outputTokenPrice: 0,
+    "*": { inputTokenPrice: 0, outputTokenPrice: 0 }, // All Ollama models are free
+  },
+
+  // Groq (fast inference)
+  groq: {
+    "llama-3.1-70b-versatile": {
+      inputTokenPrice: 0.59,
+      outputTokenPrice: 0.79,
     },
+    "llama-3.1-8b-instant": { inputTokenPrice: 0.05, outputTokenPrice: 0.08 },
+    "mixtral-8x7b-32768": { inputTokenPrice: 0.24, outputTokenPrice: 0.24 },
   },
 };
 
 /**
- * Calculate cost based on token usage and model pricing.
+ * Get pricing for a model.
  *
- * @param usage - Token usage (input, output, total)
- * @param pricing - Model pricing (per 1M tokens)
- * @returns Cost in dollars
+ * Priority:
+ * 1. Custom pricing (from Mandate)
+ * 2. Default pricing (built-in database)
+ * 3. Wildcard pricing (e.g., ollama/*)
+ * 4. undefined (caller should handle)
+ *
+ * @param provider - Provider name (case-insensitive)
+ * @param model - Model name
+ * @param customPricing - Custom pricing override (from Mandate)
+ * @returns Pricing or undefined if not found
+ */
+export function getPricing(
+  provider: string,
+  model: string,
+  customPricing?: ProviderPricing
+): ModelPricing | undefined {
+  const normalizedProvider = provider.toLowerCase();
+
+  // 1. Check custom pricing first (highest priority)
+  if (customPricing?.[normalizedProvider]) {
+    const providerPricing = customPricing[normalizedProvider];
+
+    // Exact model match
+    if (providerPricing[model]) {
+      return providerPricing[model];
+    }
+
+    // Wildcard match
+    if (providerPricing["*"]) {
+      return providerPricing["*"];
+    }
+  }
+
+  // 2. Check default pricing
+  const defaultProviderPricing = DEFAULT_PRICING[normalizedProvider];
+  if (!defaultProviderPricing) {
+    return undefined;
+  }
+
+  // Exact model match
+  if (defaultProviderPricing[model]) {
+    return defaultProviderPricing[model];
+  }
+
+  // Wildcard match (e.g., ollama/*)
+  if (defaultProviderPricing["*"]) {
+    return defaultProviderPricing["*"];
+  }
+
+  return undefined;
+}
+
+/**
+ * Calculate cost from token usage.
+ *
+ * @param usage - Token usage
+ * @param pricing - Model pricing
+ * @returns Cost in USD
  */
 export function calculateCost(
-  usage: TokenUsage,
+  usage: { inputTokens: number; outputTokens: number },
   pricing: ModelPricing
 ): number {
   const inputCost = (usage.inputTokens / 1_000_000) * pricing.inputTokenPrice;
@@ -115,69 +145,28 @@ export function calculateCost(
 }
 
 /**
- * Estimate cost for a prompt based on estimated tokens.
+ * Estimate cost before execution.
  *
- * @param estimatedInputTokens - Estimated input tokens
- * @param estimatedOutputTokens - Estimated output tokens
+ * @param inputTokens - Estimated input tokens
+ * @param outputTokens - Estimated output tokens
  * @param pricing - Model pricing
- * @returns Estimated cost in dollars
+ * @returns Estimated cost in USD
  */
 export function estimateCost(
-  estimatedInputTokens: number,
-  estimatedOutputTokens: number,
+  inputTokens: number,
+  outputTokens: number,
   pricing: ModelPricing
 ): number {
-  return calculateCost(
-    {
-      inputTokens: estimatedInputTokens,
-      outputTokens: estimatedOutputTokens,
-      totalTokens: estimatedInputTokens + estimatedOutputTokens,
-    },
-    pricing
-  );
+  return calculateCost({ inputTokens, outputTokens }, pricing);
 }
 
 /**
- * Get pricing for a specific provider and model.
+ * Estimate tokens from text (rough approximation).
  *
- * @param provider - Provider name (openai, anthropic, etc.)
- * @param model - Model name
- * @param customPricing - Optional custom pricing database
- * @returns Model pricing or undefined if not found
- */
-export function getPricing(
-  provider: string,
-  model: string,
-  customPricing?: Record<string, ProviderPricing>
-): ModelPricing | undefined {
-  const pricingDb = customPricing || DEFAULT_PRICING;
-
-  const providerPricing = pricingDb[provider.toLowerCase()];
-  if (!providerPricing) {
-    return undefined;
-  }
-
-  // Try exact match first
-  if (providerPricing[model]) {
-    return providerPricing[model];
-  }
-
-  // Try wildcard match (for providers like Ollama)
-  if (providerPricing["*"]) {
-    return providerPricing["*"];
-  }
-
-  return undefined;
-}
-
-/**
- * Estimate tokens in text (rough approximation).
  * Rule of thumb: ~4 characters per token for English text.
+ * For production, use tiktoken or provider's tokenizer.
  *
- * This is a very rough estimate. For production, use a proper tokenizer
- * like tiktoken (OpenAI) or the provider's tokenizer API.
- *
- * @param text - Text to estimate
+ * @param text - Input text
  * @returns Estimated token count
  */
 export function estimateTokens(text: string): number {

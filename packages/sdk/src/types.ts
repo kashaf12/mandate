@@ -40,7 +40,10 @@ export interface Mandate {
   rateLimit?: RateLimit;
 
   // Default charging policy (if tool doesn't specify one)
-  defaultChargingPolicy?: ChargingPolicy; // ← NEW
+  defaultChargingPolicy?: ChargingPolicy;
+
+  // Custom pricing (optional)
+  customPricing?: ProviderPricing;
 }
 
 export interface ToolPolicy {
@@ -106,7 +109,9 @@ export interface ModelPricing {
 }
 
 export interface ProviderPricing {
-  [modelName: string]: ModelPricing;
+  [provider: string]: {
+    [modelName: string]: ModelPricing;
+  };
 }
 
 export interface TokenUsage {

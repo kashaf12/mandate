@@ -6,6 +6,13 @@
     "example:email-baseline": "tsx src/email-baseline.ts",
     "example:email-mandate": "tsx src/email-with-mandate.ts",
     "example:email-simple": "tsx src/email-simple.ts",
+    "example:retry-storm": "tsx src/retry-storm.ts",
+    "example:budget-runaway": "tsx src/budget-runaway.ts",
+    "example:tool-permissions": "tsx src/tool-permissions.ts",
+    "example:retry-storm-llm": "tsx src/retry-storm-llm.ts",
+    "example:tool-hallucination": "tsx src/tool-hallucination.ts",
+    "example:custom-pricing": "tsx src/custom-pricing.ts",
+    "example:all": "pnpm run example:email-baseline && pnpm run example:email-mandate && pnpm run example:email-simple && pnpm run example:retry-storm && pnpm run example:budget-runaway && pnpm run example:tool-permissions && pnpm run example:retry-storm-llm && pnpm run example:tool-hallucination && pnpm run example:custom-pricing",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

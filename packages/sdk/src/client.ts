@@ -170,8 +170,8 @@ export class MandateClient {
     // Estimate input tokens
     const inputTokens = estimateTokensFromMessages(messages);
 
-    // Get pricing
-    const pricing = getPricing(provider, model);
+    // Get pricing (custom pricing from mandate takes precedence)
+    const pricing = getPricing(provider, model, this.mandate.customPricing);
 
     // Calculate max output tokens
     const remainingBudget = this.getRemainingBudget() || Infinity;
@@ -179,13 +179,22 @@ export class MandateClient {
       ? calculateMaxOutputTokens(remainingBudget, inputTokens, pricing, 2000)
       : 2000;
 
+    // Warn if no pricing found
+    if (!pricing) {
+      console.warn(
+        `[Mandate] No pricing found for ${provider}/${model}. ` +
+          `Assuming $0 cost. Add customPricing to Mandate for accurate tracking.`
+      );
+    }
+
     // Create action
     const action = createLLMAction(
       this.mandate.agentId,
       provider,
       model,
       inputTokens,
-      maxOutputTokens
+      maxOutputTokens,
+      this.mandate.customPricing // Pass custom pricing
     );
 
     // Execute with max_tokens passed to executor
