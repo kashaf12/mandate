@@ -6,7 +6,7 @@ Mandate SDK is the first layer of [Know Your Agent (KYA)](./docs/VISION.md) infr
 
 <div align="center">
 
-[![Tests](https://img.shields.io/badge/tests-173%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-241%20passing-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -404,7 +404,7 @@ Mandate SDK is built in **8 layers**:
 - ✅ **Explainable** - Every decision has a reason
 - ✅ **Type-safe** - Strict TypeScript
 - ✅ **Zero dependencies** - Core SDK has no deps
-- ✅ **Testable** - 173 passing tests
+- ✅ **Testable** - 241 passing tests
 
 See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
 
@@ -468,7 +468,42 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 
 ## Roadmap
 
-### Phase 1: Mandate SDK (✅ Current)
+### Phase Overview
+
+| Phase       | Status          | Description                          |
+| ----------- | --------------- | ------------------------------------ |
+| **Phase 1** | ✅ **Complete** | Runtime enforcement (local)          |
+| **Phase 2** | ✅ **Complete** | Agent identity & argument validation |
+| **Phase 3** | 🔄 In Progress  | Distributed coordination (Redis)     |
+| **Phase 4** | Planned         | Delegation chains                    |
+| **Phase 5** | Planned         | Cryptographic verification           |
+
+### Phase 1: Runtime Enforcement ✅
+- Budget limits, rate limits, tool permissions
+- Charging policies, result verification
+- Audit logging, kill switch
+- **173 tests passing**
+
+### Phase 2: Agent Identity & Policies ✅
+- Stable agent identities with persistent IDs
+- Agent registry (local, swappable backend)
+- Argument validation (Zod schemas + custom patterns)
+- Mandate templates (restricted, dev, prod, temporary)
+- CommonSchemas for reusable validation
+- ValidationPatterns (paths, emails, SQL)
+- **241 tests passing**
+
+### Phase 3: Distributed Authority 🔄
+- Redis-backed state
+- Global per-agent limits
+- Distributed kill switch
+- Coming Q1 2025
+
+---
+
+### Detailed Phase Information
+
+### Phase 1: Runtime Enforcement ✅
 
 **Status: Complete (December 2024)**
 
@@ -481,6 +516,7 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - ✅ Charging policies (4 types)
 - ✅ Custom pricing
 - ✅ Result verification
+- **173 tests passing**
 
 **Limitations:**
 
@@ -488,17 +524,31 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - No distributed coordination
 - No cross-system trust
 
-### Phase 2: Agent Identity (Q1 2025)
+### Phase 2: Agent Identity & Policies ✅
 
-**Goal:** Formalize agent identity and ownership
+**Status: Complete (December 2024)**
 
-- [ ] Stable agent IDs (persistent across restarts)
-- [ ] Principal tracking (who owns the agent)
-- [ ] Mandate issuance API
-- [ ] Agent registry
-- [ ] Identity-based policy evaluation
+- ✅ Stable agent IDs (persistent across restarts)
+- ✅ Principal tracking (who owns the agent)
+- ✅ Mandate issuance API (factory & templates)
+- ✅ Agent registry (local, swappable backend)
+- ✅ Argument validation (Zod schemas + custom patterns)
+- ✅ CommonSchemas for reusable validation
+- ✅ ValidationPatterns (paths, emails, SQL)
+- **241 tests passing**
 
-### Phase 3: Distributed Authority (Q2 2025)
+**What's New:**
+
+- `createMandate()` - Programmatic mandate creation
+- `MandateTemplates` - 4 templates (restricted, dev, prod, temporary)
+- `AgentIdentity` - Stable IDs with metadata
+- `MemoryAgentRegistry` - Local agent tracking
+- `CommonSchemas` - Pre-built Zod schemas
+- `ValidationPatterns` - Built-in validation functions
+
+### Phase 3: Distributed Authority 🔄
+
+**Status: In Progress (Q1 2025)**
 
 **Goal:** Coordination across multiple processes/servers
 
