@@ -61,3 +61,6 @@ export {
   NoOpAuditLogger,
   MultiAuditLogger,
 } from "./audit";
+
+// Kill Switch
+export { KillSwitch } from "./killswitch";
