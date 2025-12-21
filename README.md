@@ -479,12 +479,14 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 | **Phase 5** | Planned         | Cryptographic verification           |
 
 ### Phase 1: Runtime Enforcement ✅
+
 - Budget limits, rate limits, tool permissions
 - Charging policies, result verification
 - Audit logging, kill switch
 - **173 tests passing**
 
 ### Phase 2: Agent Identity & Policies ✅
+
 - Stable agent identities with persistent IDs
 - Agent registry (local, swappable backend)
 - Argument validation (Zod schemas + custom patterns)
@@ -494,6 +496,7 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - **241 tests passing**
 
 ### Phase 3: Distributed Authority 🔄
+
 - Redis-backed state
 - Global per-agent limits
 - Distributed kill switch
