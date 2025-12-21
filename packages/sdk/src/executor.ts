@@ -1,35 +1,32 @@
-import type { Action, Mandate } from "./types";
+import type { Action, Mandate, AuditEntry, BlockCode } from "./types";
 import { MandateBlockedError } from "./types";
 import type { PolicyEngine } from "./policy";
 import type { StateManager } from "./state";
 import { evaluateChargingPolicy } from "./charging";
 import type { ChargingContext } from "./charging";
+import type { AuditLogger } from "./audit";
 
 /**
  * Execute an action with mandate enforcement.
  *
- * This is the core primitive of the SDK. It implements:
- *
- * Phase 1: Authorize (PolicyEngine evaluation, no state mutation)
- * Phase 2: Execute (run the actual function, can fail)
- * Phase 3: Verify (optional result validation)
- * Phase 4: Compute Cost (apply charging policy based on outcomes)
- * Phase 5: Commit (StateManager mutation, only if charging policy says to charge)
- *
- * CRITICAL INVARIANTS:
- * - PolicyEngine.evaluate() NEVER mutates state
- * - State is ONLY committed if charging policy returns cost > 0
- * - Retries are safe (replay protection via action IDs)
- * - Execution failures are handled per charging policy
- * - Verification failures are handled per charging policy
+ * @param action - The action to execute
+ * @param executor - Function that executes the action
+ * @param mandate - Mandate defining authority
+ * @param policy - PolicyEngine instance
+ * @param stateManager - StateManager instance
+ * @param auditLogger - Optional audit logger (logs all decisions)
+ * @returns Execution result
  */
 export async function executeWithMandate<T>(
   action: Action,
   executor: () => Promise<T>,
   mandate: Mandate,
   policy: PolicyEngine,
-  stateManager: StateManager
+  stateManager: StateManager,
+  auditLogger?: AuditLogger
 ): Promise<T> {
+  const startTime = Date.now();
+
   // Get current state
   const state = stateManager.get(action.agentId, mandate.id);
 
@@ -37,6 +34,22 @@ export async function executeWithMandate<T>(
   const decision = policy.evaluate(action, mandate, state);
 
   if (decision.type === "BLOCK") {
+    // Log block decision
+    if (auditLogger) {
+      const auditEntry = createAuditEntry(
+        action,
+        mandate,
+        decision.type,
+        decision.reason,
+        decision.code,
+        undefined,
+        undefined,
+        state.cumulativeCost,
+        Date.now() - startTime
+      );
+      await Promise.resolve(auditLogger.log(auditEntry));
+    }
+
     // Block before execution
     throw new MandateBlockedError(
       decision.code,
@@ -53,6 +66,7 @@ export async function executeWithMandate<T>(
   let verificationSuccess = false;
   let result: T;
   let actualCost: number | undefined;
+  let error: Error | undefined;
 
   // Phase 2: Execute (can fail)
   try {
@@ -65,6 +79,7 @@ export async function executeWithMandate<T>(
   } catch (executionError) {
     executed = true;
     executionSuccess = false;
+    error = executionError as Error;
 
     // Compute cost for failed execution
     const chargingPolicy = getChargingPolicy(action, mandate);
@@ -88,6 +103,22 @@ export async function executeWithMandate<T>(
         mandate.rateLimit,
         getToolRateLimit(action, mandate)
       );
+    }
+
+    // Log execution failure
+    if (auditLogger) {
+      const auditEntry = createAuditEntry(
+        action,
+        mandate,
+        "BLOCK",
+        `Execution failed: ${error.message}`,
+        undefined,
+        action.estimatedCost,
+        cost > 0 ? cost : undefined,
+        state.cumulativeCost,
+        Date.now() - startTime
+      );
+      await Promise.resolve(auditLogger.log(auditEntry));
     }
 
     // Re-throw execution error
@@ -134,6 +165,22 @@ export async function executeWithMandate<T>(
         );
       }
 
+      // Log verification failure
+      if (auditLogger) {
+        const auditEntry = createAuditEntry(
+          action,
+          mandate,
+          "BLOCK",
+          `Verification failed: ${verification.reason}`,
+          undefined,
+          action.estimatedCost,
+          cost > 0 ? cost : undefined,
+          state.cumulativeCost,
+          Date.now() - startTime
+        );
+        await Promise.resolve(auditLogger.log(auditEntry));
+      }
+
       // Throw verification error
       throw new Error(`Verification failed: ${verification.reason}`);
     }
@@ -168,9 +215,62 @@ export async function executeWithMandate<T>(
     );
   }
 
+  // Log success
+  if (auditLogger) {
+    const auditEntry = createAuditEntry(
+      action,
+      mandate,
+      "ALLOW",
+      decision.reason,
+      undefined,
+      action.estimatedCost,
+      cost,
+      state.cumulativeCost,
+      Date.now() - startTime
+    );
+    await Promise.resolve(auditLogger.log(auditEntry));
+  }
+
   return result;
 }
 
+/**
+ * Create an audit entry from execution details.
+ */
+function createAuditEntry(
+  action: Action,
+  mandate: Mandate,
+  decision: "ALLOW" | "BLOCK",
+  reason: string,
+  blockCode?: BlockCode, // ← Changed from string to BlockCode
+  estimatedCost?: number,
+  actualCost?: number,
+  cumulativeCost?: number,
+  durationMs?: number
+): AuditEntry {
+  return {
+    id: `audit-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+    timestamp: Date.now(),
+    agentId: action.agentId,
+    mandateId: mandate.id,
+    actionId: action.id,
+    traceId: action.traceId,
+    parentActionId: action.parentActionId,
+    action: action.type,
+    tool: action.type === "tool_call" ? action.tool : undefined,
+    provider: action.type === "llm_call" ? action.provider : undefined,
+    model: action.type === "llm_call" ? action.model : undefined,
+    decision,
+    reason,
+    blockCode,
+    estimatedCost,
+    actualCost,
+    cumulativeCost,
+    metadata: durationMs ? { durationMs } : undefined,
+  };
+}
+
+// ... rest of file (getChargingPolicy, getToolRateLimit unchanged)
 /**
  * Get the charging policy for an action.
  * Tool-specific policy takes precedence over mandate default.

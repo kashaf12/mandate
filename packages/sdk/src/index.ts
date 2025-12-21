@@ -51,3 +51,13 @@ export {
 
 // Utilities
 export { matchesPattern, isToolAllowed } from "./patterns";
+
+// Audit Loggers
+export type { AuditLogger } from "./audit";
+export {
+  ConsoleAuditLogger,
+  MemoryAuditLogger,
+  FileAuditLogger,
+  NoOpAuditLogger,
+  MultiAuditLogger,
+} from "./audit";

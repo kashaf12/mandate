@@ -3,6 +3,7 @@ import { executeWithMandate } from "./executor";
 import type { Action, Mandate, TokenUsage } from "./types";
 import type { PolicyEngine } from "./policy";
 import type { StateManager } from "./state";
+import type { AuditLogger } from "./audit";
 
 /**
  * Generate a unique action ID.
@@ -119,14 +120,16 @@ export async function executeLLM<T>(
   fn: () => Promise<T>,
   mandate: Mandate,
   policy: PolicyEngine,
-  stateManager: StateManager
+  stateManager: StateManager,
+  auditLogger?: AuditLogger
 ): Promise<T> {
   const result = await executeWithMandate(
     action,
     fn,
     mandate,
     policy,
-    stateManager
+    stateManager,
+    auditLogger
   );
 
   // Extract actual cost from response (only for LLM calls)
@@ -178,9 +181,17 @@ export async function executeTool<T>(
   fn: () => Promise<T>,
   mandate: Mandate,
   policy: PolicyEngine,
-  stateManager: StateManager
+  stateManager: StateManager,
+  auditLogger?: AuditLogger
 ): Promise<T> {
-  return executeWithMandate(action, fn, mandate, policy, stateManager);
+  return executeWithMandate(
+    action,
+    fn,
+    mandate,
+    policy,
+    stateManager,
+    auditLogger
+  );
 }
 
 /**
