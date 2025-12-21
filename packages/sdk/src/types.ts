@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { AgentIdentity } from "./identity";
+import type { ArgumentValidation } from "./validation";
 
 export interface Mandate {
   version: number;
@@ -53,6 +54,7 @@ export interface ToolPolicy {
   maxCostPerCall?: number;
   rateLimit?: RateLimit;
   verifyResult?: ResultVerifier;
+  argumentValidation?: ArgumentValidation; // NEW - Phase 2
 }
 
 // ============================================================================
@@ -218,7 +220,8 @@ export type BlockCode =
   | "AGENT_KILLED"
   | "UNKNOWN_TOOL"
   | "DUPLICATE_ACTION"
-  | "VERIFICATION_FAILED";
+  | "VERIFICATION_FAILED"
+  | "ARGUMENT_VALIDATION_FAILED"; // NEW - Phase 2
 
 export type Decision =
   | {

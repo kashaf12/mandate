@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { PolicyEngine } from "../src/policy";
 import type { Mandate, Action, AgentState } from "../src/types";
+import { z } from "zod";
+import { ValidationPatterns, CommonSchemas } from "../src/validation";
 
 describe("PolicyEngine", () => {
   let engine: PolicyEngine;
@@ -504,6 +506,188 @@ describe("PolicyEngine", () => {
       const decision = engine.evaluate(action, mandate, state);
 
       expect((decision as any).code).toBe("TOOL_DENIED");
+    });
+  });
+
+  describe("Argument Validation (Phase 2)", () => {
+    it("blocks when Zod schema validation fails", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "read_file",
+        args: { path: 123 }, // Should be string
+      };
+
+      mandate.allowedTools = ["read_file"];
+      mandate.toolPolicies = {
+        read_file: {
+          argumentValidation: {
+            schema: z.object({
+              path: z.string(),
+            }),
+          },
+        },
+      };
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      expect(decision.type).toBe("BLOCK");
+      expect((decision as any).code).toBe("ARGUMENT_VALIDATION_FAILED");
+      expect(decision.reason).toContain("Expected string");
+    });
+
+    it("blocks when custom validation fails", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "read_file",
+        args: { path: "/etc/passwd" },
+      };
+
+      mandate.allowedTools = ["read_file"];
+      mandate.toolPolicies = {
+        read_file: {
+          argumentValidation: {
+            validate: ValidationPatterns.noSystemPaths,
+          },
+        },
+      };
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      expect(decision.type).toBe("BLOCK");
+      expect((decision as any).code).toBe("ARGUMENT_VALIDATION_FAILED");
+      expect(decision.reason).toContain("System paths not allowed");
+    });
+
+    it("allows when validation passes", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "read_file",
+        args: { path: "/data/file.txt" },
+        estimatedCost: 0.01,
+      };
+
+      mandate.allowedTools = ["read_file"];
+      mandate.toolPolicies = {
+        read_file: {
+          argumentValidation: {
+            schema: CommonSchemas.filePath,
+            validate: ValidationPatterns.noSystemPaths,
+          },
+        },
+      };
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      expect(decision.type).toBe("ALLOW");
+    });
+
+    it("validates before cost limits (precedence)", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "read_file",
+        args: { path: "/etc/passwd" },
+        estimatedCost: 0.01,
+      };
+
+      mandate.allowedTools = ["read_file"];
+      mandate.maxCostTotal = 10.0; // Would pass cost check
+      mandate.toolPolicies = {
+        read_file: {
+          argumentValidation: {
+            validate: ValidationPatterns.noSystemPaths,
+          },
+        },
+      };
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      // Should block for validation, not cost
+      expect(decision.type).toBe("BLOCK");
+      expect((decision as any).code).toBe("ARGUMENT_VALIDATION_FAILED");
+    });
+
+    it("uses CommonSchemas for validation", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "send_email",
+        args: { to: "invalid-email" },
+      };
+
+      mandate.allowedTools = ["send_email"];
+      mandate.toolPolicies = {
+        send_email: {
+          argumentValidation: {
+            schema: CommonSchemas.email,
+          },
+        },
+      };
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      expect(decision.type).toBe("BLOCK");
+      expect((decision as any).code).toBe("ARGUMENT_VALIDATION_FAILED");
+      expect(decision.reason).toContain("Invalid email format");
+    });
+
+    it("combines schema and custom validation", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "send_email",
+        args: { to: "user@external.com", subject: "Test" },
+      };
+
+      mandate.allowedTools = ["send_email"];
+      mandate.toolPolicies = {
+        send_email: {
+          argumentValidation: {
+            schema: CommonSchemas.email, // Validates email format
+            validate: ValidationPatterns.internalEmailOnly("company.com"), // Validates domain
+          },
+        },
+      };
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      expect(decision.type).toBe("BLOCK");
+      expect((decision as any).code).toBe("ARGUMENT_VALIDATION_FAILED");
+      expect(decision.reason).toContain("Only company.com emails allowed");
+    });
+
+    it("skips validation when no argumentValidation configured", () => {
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "read_file",
+        args: { path: "/etc/passwd" }, // Would normally be blocked
+        estimatedCost: 0.01,
+      };
+
+      mandate.allowedTools = ["read_file"];
+      // No toolPolicies configured - validation skipped
+
+      const decision = engine.evaluate(action, mandate, state);
+
+      expect(decision.type).toBe("ALLOW"); // Passes because no validation
     });
   });
 });

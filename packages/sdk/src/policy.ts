@@ -1,5 +1,7 @@
 import type { Action, Mandate, AgentState, Decision } from "./types";
 import { isToolAllowed } from "./patterns";
+import { validateSchema } from "./validation";
+import type { ValidationContext } from "./validation";
 
 export class PolicyEngine {
   /**
@@ -15,8 +17,9 @@ export class PolicyEngine {
    * 2. Kill switch
    * 3. Mandate expiration
    * 4. Tool permissions (deny > allow)
-   * 5. Cost limits (per-call, then cumulative)
-   * 6. Rate limits (agent-level, then tool-level)
+   * 5. Argument validation (NEW - Phase 2)
+   * 6. Cost limits (per-call, then cumulative)
+   * 7. Rate limits (agent-level, then tool-level)
    *
    * @param action - The action to evaluate
    * @param mandate - The authority envelope
@@ -92,8 +95,53 @@ export class PolicyEngine {
         };
       }
 
-      // 4b. Tool-specific cost limit
+      // 4b. Argument validation (NEW - Phase 2)
       const toolPolicy = mandate.toolPolicies?.[action.tool];
+      if (toolPolicy?.argumentValidation) {
+        const validation = toolPolicy.argumentValidation;
+
+        // Schema validation (Zod)
+        if (validation.schema && action.args) {
+          const schemaResult = validateSchema(action.args, validation.schema);
+
+          if (!schemaResult.allowed) {
+            return {
+              type: "BLOCK",
+              reason: `Argument validation failed: ${schemaResult.reason}`,
+              code: "ARGUMENT_VALIDATION_FAILED",
+              hard: true,
+            };
+          }
+
+          // Note: We don't mutate action.args here to keep the function pure
+          // Transformed args would be used by the executor if needed
+        }
+
+        // Custom validation
+        if (validation.validate && action.args) {
+          const ctx: ValidationContext = {
+            tool: action.tool,
+            args: action.args,
+            agentId: action.agentId,
+          };
+
+          const customResult = validation.validate(ctx);
+
+          if (!customResult.allowed) {
+            return {
+              type: "BLOCK",
+              reason: `Argument validation failed: ${customResult.reason}`,
+              code: "ARGUMENT_VALIDATION_FAILED",
+              hard: true,
+            };
+          }
+
+          // Note: We don't mutate action.args here to keep the function pure
+          // Transformed args would be used by the executor if needed
+        }
+      }
+
+      // 4c. Tool-specific cost limit
       if (toolPolicy?.maxCostPerCall && action.estimatedCost) {
         if (action.estimatedCost > toolPolicy.maxCostPerCall) {
           return {
@@ -105,7 +153,7 @@ export class PolicyEngine {
         }
       }
 
-      // 4c. Tool-specific rate limit
+      // 4d. Tool-specific rate limit
       if (toolPolicy?.rateLimit) {
         const toolCount = state.toolCallCounts[action.tool];
         if (toolCount) {
