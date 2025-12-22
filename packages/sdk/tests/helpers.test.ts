@@ -213,7 +213,7 @@ describe("Helper Functions", () => {
 
       await executeLLM(action, fn, mandate, policy, stateManager);
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
 
       // Should use actual cost, not estimated
       expect(state.cumulativeCost).toBeGreaterThan(0);
@@ -262,7 +262,7 @@ describe("Helper Functions", () => {
 
       await executeTool(action, fn, mandate, policy, stateManager);
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
 
       expect(state.cumulativeCost).toBe(0.05);
       expect(state.executionCost).toBe(0.05);

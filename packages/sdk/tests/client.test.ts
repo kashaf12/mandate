@@ -19,12 +19,12 @@ describe("MandateClient", () => {
   });
 
   describe("Construction", () => {
-    it("creates client with minimal config", () => {
+    it("creates client with minimal config", async () => {
       const client = new MandateClient({ mandate });
 
       expect(client).toBeDefined();
-      expect(client.getCost().total).toBe(0);
-      expect(client.getCallCount()).toBe(0);
+      expect((await client.getCost()).total).toBe(0);
+      expect(await client.getCallCount()).toBe(0);
     });
 
     it("creates client with console logger", () => {
@@ -84,8 +84,8 @@ describe("MandateClient", () => {
 
       expect(result).toEqual({ data: "success" });
       expect(fn).toHaveBeenCalled();
-      expect(client.getCost().total).toBe(0.01);
-      expect(client.getCallCount()).toBe(1);
+      expect((await client.getCost()).total).toBe(0.01);
+      expect(await client.getCallCount()).toBe(1);
     });
 
     it("blocks unauthorized tools", async () => {
@@ -96,7 +96,7 @@ describe("MandateClient", () => {
 
       await expect(client.executeTool(action, fn)).rejects.toThrow();
       expect(fn).not.toHaveBeenCalled();
-      expect(client.getCost().total).toBe(0);
+      expect((await client.getCost()).total).toBe(0);
     });
   });
 
@@ -115,7 +115,7 @@ describe("MandateClient", () => {
       const result = await client.executeLLM(action, fn);
 
       expect(result).toBe(mockResponse);
-      expect(client.getCost().cognition).toBeGreaterThan(0);
+      expect((await client.getCost()).cognition).toBeGreaterThan(0);
     });
   });
 
@@ -125,7 +125,7 @@ describe("MandateClient", () => {
       const action = createToolAction("agent-1", "read_file", {}, 0.5);
       await client.executeTool(action, vi.fn().mockResolvedValue({}));
 
-      const cost = client.getCost();
+      const cost = await client.getCost();
       expect(cost.total).toBe(0.5);
       expect(cost.execution).toBe(0.5);
       expect(cost.cognition).toBe(0);
@@ -134,25 +134,25 @@ describe("MandateClient", () => {
     it("returns remaining budget", async () => {
       const client = new MandateClient({ mandate });
 
-      expect(client.getRemainingBudget()).toBe(10.0);
+      expect(await client.getRemainingBudget()).toBe(10.0);
 
       const action = createToolAction("agent-1", "read_file", {}, 3.0);
       await client.executeTool(action, vi.fn().mockResolvedValue({}));
 
-      expect(client.getRemainingBudget()).toBe(7.0);
+      expect(await client.getRemainingBudget()).toBe(7.0);
     });
 
-    it("returns undefined for unlimited budget", () => {
+    it("returns undefined for unlimited budget", async () => {
       delete mandate.maxCostTotal;
       const client = new MandateClient({ mandate });
 
-      expect(client.getRemainingBudget()).toBeUndefined();
+      expect(await client.getRemainingBudget()).toBeUndefined();
     });
 
     it("returns call count", async () => {
       const client = new MandateClient({ mandate });
 
-      expect(client.getCallCount()).toBe(0);
+      expect(await client.getCallCount()).toBe(0);
 
       // Create DIFFERENT actions (different IDs)
       const action1 = createToolAction("agent-1", "read_file", {}, 0.01);
@@ -161,24 +161,24 @@ describe("MandateClient", () => {
       await client.executeTool(action1, vi.fn().mockResolvedValue({}));
       await client.executeTool(action2, vi.fn().mockResolvedValue({}));
 
-      expect(client.getCallCount()).toBe(2);
+      expect(await client.getCallCount()).toBe(2);
     });
   });
 
   describe("Kill Switch", () => {
-    it("kills agent", () => {
+    it("kills agent", async () => {
       const client = new MandateClient({ mandate });
 
-      expect(client.isKilled()).toBe(false);
+      expect(await client.isKilled()).toBe(false);
 
-      client.kill("Test kill");
+      await client.kill("Test kill");
 
-      expect(client.isKilled()).toBe(true);
+      expect(await client.isKilled()).toBe(true);
     });
 
     it("blocks execution when killed", async () => {
       const client = new MandateClient({ mandate });
-      client.kill("Test kill");
+      await client.kill("Test kill");
 
       const action = createToolAction("agent-1", "read_file", {}, 0.01);
 
@@ -187,15 +187,15 @@ describe("MandateClient", () => {
       );
     });
 
-    it("resurrects killed agent", () => {
+    it("resurrects killed agent", async () => {
       const client = new MandateClient({ mandate });
-      client.kill("Test kill");
+      await client.kill("Test kill");
 
-      expect(client.isKilled()).toBe(true);
+      expect(await client.isKilled()).toBe(true);
 
-      client.resurrect();
+      await client.resurrect();
 
-      expect(client.isKilled()).toBe(false);
+      expect(await client.isKilled()).toBe(false);
     });
   });
 

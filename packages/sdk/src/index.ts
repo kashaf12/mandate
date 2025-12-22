@@ -67,7 +67,8 @@ export {
 // Classes
 export { MandateBlockedError } from "./types";
 export { PolicyEngine } from "./policy";
-export { StateManager } from "./state";
+export { StateManager, MemoryStateManager } from "./state";
+export type { IStateManager, StateManagerConfig, RedisConfig } from "./state";
 
 // Core Primitive
 export { executeWithMandate } from "./executor";

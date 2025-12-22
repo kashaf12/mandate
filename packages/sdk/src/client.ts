@@ -174,7 +174,7 @@ export class MandateClient {
     const pricing = getPricing(provider, model, this.mandate.customPricing);
 
     // Calculate max output tokens
-    const remainingBudget = this.getRemainingBudget() || Infinity;
+    const remainingBudget = (await this.getRemainingBudget()) || Infinity;
     const maxOutputTokens = pricing
       ? calculateMaxOutputTokens(remainingBudget, inputTokens, pricing, 2000)
       : 2000;
@@ -204,15 +204,18 @@ export class MandateClient {
   /**
    * Kill this agent.
    */
-  kill(reason?: string): void {
-    this.killSwitch.kill(this.mandate.agentId, this.mandate.id, reason);
+  async kill(reason?: string): Promise<void> {
+    await this.killSwitch.kill(this.mandate.agentId, this.mandate.id, reason);
   }
 
   /**
    * Check if agent is killed.
    */
-  isKilled(): boolean {
-    return this.killSwitch.isKilled(this.mandate.agentId, this.mandate.id);
+  async isKilled(): Promise<boolean> {
+    return await this.killSwitch.isKilled(
+      this.mandate.agentId,
+      this.mandate.id
+    );
   }
 
   /**
@@ -225,8 +228,15 @@ export class MandateClient {
   /**
    * Get current cumulative cost.
    */
-  getCost(): { total: number; cognition: number; execution: number } {
-    const state = this.stateManager.get(this.mandate.agentId, this.mandate.id);
+  async getCost(): Promise<{
+    total: number;
+    cognition: number;
+    execution: number;
+  }> {
+    const state = await this.stateManager.get(
+      this.mandate.agentId,
+      this.mandate.id
+    );
     return {
       total: state.cumulativeCost,
       cognition: state.cognitionCost,
@@ -237,17 +247,23 @@ export class MandateClient {
   /**
    * Get remaining budget.
    */
-  getRemainingBudget(): number | undefined {
+  async getRemainingBudget(): Promise<number | undefined> {
     if (!this.mandate.maxCostTotal) return undefined;
-    const state = this.stateManager.get(this.mandate.agentId, this.mandate.id);
+    const state = await this.stateManager.get(
+      this.mandate.agentId,
+      this.mandate.id
+    );
     return this.mandate.maxCostTotal - state.cumulativeCost;
   }
 
   /**
    * Get total call count.
    */
-  getCallCount(): number {
-    const state = this.stateManager.get(this.mandate.agentId, this.mandate.id);
+  async getCallCount(): Promise<number> {
+    const state = await this.stateManager.get(
+      this.mandate.agentId,
+      this.mandate.id
+    );
     return state.callCount;
   }
 

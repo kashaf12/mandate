@@ -28,7 +28,7 @@ export async function executeWithMandate<T>(
   const startTime = Date.now();
 
   // Get current state
-  const state = stateManager.get(action.agentId, mandate.id);
+  const state = await stateManager.get(action.agentId, mandate.id);
 
   // Phase 1: Authorize (pure evaluation, no mutation)
   const decision = policy.evaluate(action, mandate, state);
@@ -96,10 +96,10 @@ export async function executeWithMandate<T>(
 
     // Commit state if charging policy says to charge
     if (cost > 0) {
-      stateManager.commitSuccess(
+      await stateManager.commitSuccess(
         action,
         state,
-        cost,
+        { actualCost: cost },
         mandate.rateLimit,
         getToolRateLimit(action, mandate)
       );
@@ -156,10 +156,10 @@ export async function executeWithMandate<T>(
 
       // Commit state if charging policy says to charge
       if (cost > 0) {
-        stateManager.commitSuccess(
+        await stateManager.commitSuccess(
           action,
           state,
-          cost,
+          { actualCost: cost },
           mandate.rateLimit,
           getToolRateLimit(action, mandate)
         );
@@ -206,10 +206,10 @@ export async function executeWithMandate<T>(
 
   // Phase 5: Commit (success path)
   if (cost > 0) {
-    stateManager.commitSuccess(
+    await stateManager.commitSuccess(
       action,
       state,
-      cost,
+      { actualCost: cost },
       mandate.rateLimit,
       getToolRateLimit(action, mandate)
     );

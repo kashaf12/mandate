@@ -19,9 +19,13 @@ export class KillSwitch {
    * killSwitch.kill('agent-1', 'Detected malicious behavior');
    * ```
    */
-  kill(agentId: string, mandateId: string, reason?: string): void {
-    const state = this.stateManager.get(agentId, mandateId);
-    this.stateManager.kill(state, reason);
+  async kill(
+    agentId: string,
+    mandateId: string,
+    reason?: string
+  ): Promise<void> {
+    const state = await this.stateManager.get(agentId, mandateId);
+    await this.stateManager.kill(state, reason);
   }
 
   /**
@@ -54,9 +58,8 @@ export class KillSwitch {
    * @param mandateId - Mandate ID
    * @returns true if agent is killed
    */
-  isKilled(agentId: string, mandateId: string): boolean {
-    const state = this.stateManager.get(agentId, mandateId);
-    return state.killed;
+  async isKilled(agentId: string, mandateId: string): Promise<boolean> {
+    return await this.stateManager.isKilled(agentId, mandateId);
   }
 
   /**
@@ -65,8 +68,8 @@ export class KillSwitch {
    * @param agentId - Agent to resurrect
    * @param mandateId - Mandate ID
    */
-  resurrect(agentId: string, mandateId: string): void {
-    const state = this.stateManager.get(agentId, mandateId);
+  async resurrect(agentId: string, mandateId: string): Promise<void> {
+    const state = await this.stateManager.get(agentId, mandateId);
     state.killed = false;
     state.killedAt = undefined;
     state.killedReason = undefined;

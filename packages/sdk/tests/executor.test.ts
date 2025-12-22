@@ -241,7 +241,7 @@ describe("executeWithMandate", () => {
 
       await executeWithMandate(action, executor, mandate, policy, stateManager);
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0.5);
     });
 
@@ -269,7 +269,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0); // Not charged
     });
 
@@ -304,7 +304,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0); // Not charged
     });
 
@@ -335,7 +335,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0.5); // Charged even on failure
     });
 
@@ -371,7 +371,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0.5); // Charged even on verification failure
     });
 
@@ -404,7 +404,7 @@ describe("executeWithMandate", () => {
 
       await executeWithMandate(action, executor, mandate, policy, stateManager);
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBeCloseTo(0.6, 10); // 0.1 + 0.3 + 0.2
     });
 
@@ -440,7 +440,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0.5); // ATTEMPT_BASED applied, not SUCCESS_BASED
     });
   });
@@ -458,7 +458,7 @@ describe("executeWithMandate", () => {
 
       const executor = vi.fn().mockResolvedValue({ data: "file contents" });
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0);
 
       await executeWithMandate(action, executor, mandate, policy, stateManager);
@@ -479,7 +479,7 @@ describe("executeWithMandate", () => {
 
       const executor = vi.fn().mockRejectedValue(new Error("Network error"));
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0);
 
       try {
@@ -524,7 +524,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0.5); // Charged
       expect(state.seenActionIds.has("action-1")).toBe(true); // Recorded
     });
@@ -545,7 +545,7 @@ describe("executeWithMandate", () => {
         actualCost: 0.48, // Actual was lower
       });
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
 
       await executeWithMandate(action, executor, mandate, policy, stateManager);
 
@@ -580,7 +580,7 @@ describe("executeWithMandate", () => {
         // Expected
       }
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.seenActionIds.has("action-1")).toBe(false);
 
       // Retry with same action ID should work
@@ -613,7 +613,7 @@ describe("executeWithMandate", () => {
       // First execution succeeds
       await executeWithMandate(action, executor, mandate, policy, stateManager);
 
-      const state = stateManager.get("agent-1", "mandate-1");
+      const state = await stateManager.get("agent-1", "mandate-1");
       expect(state.cumulativeCost).toBe(0.5);
 
       // Second execution with same ID should be blocked
