@@ -13,7 +13,12 @@
  * - Agent is stopped
  */
 
-import { MandateClient, createToolAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createToolAction,
+  MandateTemplates,
+  CommonSchemas,
+} from "@mandate/sdk";
 
 // Simulated email API with transient failures
 let attemptCount = 0;
@@ -74,12 +79,9 @@ async function withMandate() {
 
   attemptCount = 0;
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-retry-protection",
-    agentId: "email-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with argument validation
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Retry-protected email agent",
     // Key enforcement: rate limit
     toolPolicies: {
       send_email: {
@@ -90,9 +92,13 @@ async function withMandate() {
         chargingPolicy: {
           type: "ATTEMPT_BASED", // Charge even on failure
         },
+        // NEW: Phase 2 - Validate email format BEFORE retrying
+        argumentValidation: {
+          schema: CommonSchemas.email,
+        },
       },
     },
-  };
+  });
 
   const client = new MandateClient({
     mandate,

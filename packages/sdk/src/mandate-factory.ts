@@ -1,4 +1,10 @@
-import type { Mandate, RateLimit, ChargingPolicy } from "./types";
+import type {
+  Mandate,
+  RateLimit,
+  ChargingPolicy,
+  ToolPolicy,
+  ProviderPricing,
+} from "./types";
 import {
   generateAgentId,
   createAgentIdentity,
@@ -27,12 +33,18 @@ export interface MandateOptions {
   allowedTools?: string[];
   deniedTools?: string[];
 
+  // Tool-specific policies
+  toolPolicies?: Record<string, ToolPolicy>;
+
   // Temporal bounds
   expiresAt?: number;
   expiresInMs?: number; // Convenience: expiresAt = now + expiresInMs
 
   // Defaults
   defaultChargingPolicy?: ChargingPolicy;
+
+  // Custom pricing
+  customPricing?: ProviderPricing;
 }
 
 /**
@@ -75,7 +87,9 @@ export function createMandate(options: MandateOptions): Mandate {
     rateLimit: options.rateLimit,
     allowedTools: options.allowedTools,
     deniedTools: options.deniedTools,
+    toolPolicies: options.toolPolicies,
     defaultChargingPolicy: options.defaultChargingPolicy,
+    customPricing: options.customPricing,
   };
 }
 

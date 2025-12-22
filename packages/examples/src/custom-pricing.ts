@@ -7,19 +7,16 @@
  * - Custom providers
  */
 
-import { MandateClient, type Mandate } from "@mandate/sdk";
+import { MandateClient, MandateTemplates } from "@mandate/sdk";
 
 async function example1_LocalModelWithCost() {
   console.log("\n" + "=".repeat(60));
   console.log("Example 1: Local Model with Cost Attribution");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-custom-local",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with custom pricing
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Local model with cost attribution",
     maxCostTotal: 1.0,
 
     // Attribute cost to local Ollama model (for budgeting/tracking)
@@ -31,7 +28,7 @@ async function example1_LocalModelWithCost() {
         },
       },
     },
-  };
+  });
 
   void new MandateClient({ mandate });
 
@@ -48,12 +45,9 @@ async function example2_ProprietaryModel() {
   console.log("Example 2: Proprietary/Custom Model");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-custom-model",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with custom pricing
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Proprietary model with custom pricing",
     maxCostTotal: 10.0,
 
     // Your own model or provider
@@ -65,7 +59,7 @@ async function example2_ProprietaryModel() {
         },
       },
     },
-  };
+  });
 
   void new MandateClient({ mandate });
 
@@ -84,12 +78,9 @@ async function example3_OverrideDefaultPricing() {
   console.log("Example 3: Override Default Pricing");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-override",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with custom pricing
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Override default pricing with negotiated rates",
     maxCostTotal: 5.0,
 
     // Override built-in pricing (e.g., negotiated rates, regional pricing)
@@ -101,7 +92,7 @@ async function example3_OverrideDefaultPricing() {
         },
       },
     },
-  };
+  });
 
   void new MandateClient({ mandate });
 
@@ -120,12 +111,9 @@ async function example4_WildcardPricing() {
   console.log("Example 4: Wildcard Pricing (All Models Same Price)");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-wildcard",
-    agentId: "agent-1",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with custom pricing
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Wildcard pricing for all models from provider",
     maxCostTotal: 10.0,
 
     // All models from provider have same pricing
@@ -138,7 +126,7 @@ async function example4_WildcardPricing() {
         },
       },
     },
-  };
+  });
 
   void new MandateClient({ mandate });
 

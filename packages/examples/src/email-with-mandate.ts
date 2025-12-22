@@ -1,4 +1,4 @@
-// Complete Mandate SDK integration - all 7 layers
+// Complete Mandate SDK integration - all 7 layers (Phase 2)
 import OpenAI from "openai";
 import {
   PolicyEngine,
@@ -9,7 +9,9 @@ import {
   KillSwitch,
   createToolAction,
   executeTool,
-  type Mandate,
+  MandateTemplates,
+  ValidationPatterns,
+  CommonSchemas,
 } from "@mandate/sdk";
 
 // The broken tool (simulates real-world API that lies about success)
@@ -46,26 +48,9 @@ const SEND_EMAIL_TOOL = {
   },
 };
 
-// Real Mandate SDK configuration with all features
-const mandate: Mandate = {
-  version: 1,
-  id: "mandate-email-1",
-  agentId: "email-agent",
-  issuedAt: Date.now(),
-
-  // Authority (Layer 1)
-  issuer: {
-    type: "human",
-    id: "kashaf@mandate.dev",
-  },
-
-  // Scope
-  scope: {
-    environment: "dev",
-    service: "email-demo",
-  },
-
-  // Permissions
+// Real Mandate SDK configuration with all features (Phase 2: Using MandateTemplates)
+const mandate = MandateTemplates.production("kashaf@mandate.dev", {
+  description: "Email automation agent with full SDK integration",
   allowedTools: ["send_email"],
   deniedTools: [],
 
@@ -78,13 +63,20 @@ const mandate: Mandate = {
     type: "SUCCESS_BASED", // Only charge for successful executions
   },
 
-  // Tool-specific policies with verification (Layer 1)
+  // Tool-specific policies with verification (Layer 1) + Phase 2 validation
   toolPolicies: {
     send_email: {
       maxCostPerCall: 0.05,
       chargingPolicy: {
         type: "ATTEMPT_BASED", // Charge even if verification fails
       },
+
+      // NEW: Phase 2 argument validation
+      argumentValidation: {
+        schema: CommonSchemas.email,
+        validate: ValidationPatterns.internalEmailOnly("mandate.dev"),
+      },
+
       verifyResult: (ctx) => {
         const result = ctx.result as any;
         if (!result.deliveryConfirmed) {
@@ -98,7 +90,7 @@ const mandate: Mandate = {
       },
     },
   },
-};
+});
 
 // Initialize all SDK components
 const policyEngine = new PolicyEngine(); // Layer 1
@@ -119,16 +111,17 @@ async function runEmailAgentWithFullSDK(task: string) {
   ];
 
   console.log(`\n${"=".repeat(80)}`);
-  console.log(`📧 EMAIL AGENT WITH FULL MANDATE SDK (All 7 Layers)`);
+  console.log(`📧 EMAIL AGENT WITH FULL MANDATE SDK (All 7 Layers + Phase 2)`);
   console.log(`${"=".repeat(80)}`);
   console.log(`Task: ${task}`);
   console.log(`Mandate: ${mandate.id}`);
-  console.log(`Authority: ${mandate.issuer?.type} (${mandate.issuer?.id})`);
+  console.log(`\nAgent Identity (Phase 2):`);
+  console.log(`  ID: ${mandate.identity?.agentId}`);
+  console.log(`  Principal: ${mandate.identity?.principal}`);
+  console.log(`  Description: ${mandate.identity?.description}`);
+  console.log(`  Created: ${new Date(mandate.identity?.createdAt || 0).toISOString()}`);
   console.log(
-    `Scope: ${mandate.scope?.environment} / ${mandate.scope?.service}`
-  );
-  console.log(
-    `Budget: $${mandate.maxCostTotal} total, $${mandate.maxCostPerCall} per call`
+    `\nBudget: $${mandate.maxCostTotal} total, $${mandate.maxCostPerCall} per call`
   );
   console.log(`Charging: ${mandate.defaultChargingPolicy?.type}`);
   console.log(`Audit: Console + Memory (${memoryLogger.count()} entries)`);

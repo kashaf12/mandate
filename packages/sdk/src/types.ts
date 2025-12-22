@@ -50,13 +50,6 @@ export interface Mandate {
   customPricing?: ProviderPricing;
 }
 
-export interface ToolPolicy {
-  maxCostPerCall?: number;
-  rateLimit?: RateLimit;
-  verifyResult?: ResultVerifier;
-  argumentValidation?: ArgumentValidation; // NEW - Phase 2
-}
-
 // ============================================================================
 // CHARGING POLICIES - How to handle cost for different outcomes
 // ============================================================================
@@ -96,7 +89,8 @@ export interface ToolPolicy {
   maxCostPerCall?: number;
   rateLimit?: RateLimit;
   verifyResult?: ResultVerifier;
-  chargingPolicy?: ChargingPolicy; // ← NEW
+  chargingPolicy?: ChargingPolicy;
+  argumentValidation?: ArgumentValidation; // NEW - Phase 2
 }
 
 export interface RateLimit {

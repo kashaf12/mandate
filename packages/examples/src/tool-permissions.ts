@@ -12,7 +12,11 @@
  * - Fail-closed (unknown = denied)
  */
 
-import { MandateClient, createToolAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createToolAction,
+  MandateTemplates,
+} from "@mandate/sdk";
 
 // Simulated tools
 const tools = {
@@ -27,15 +31,12 @@ async function demonstrateAllowlist() {
   console.log("✅ ALLOWLIST ENFORCEMENT");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-allowlist",
-    agentId: "safe-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates.restricted
+  const mandate = MandateTemplates.restricted("user@example.com", {
+    description: "Safe read-only agent",
     // Only allow read operations
     allowedTools: ["read_*", "search_*"],
-  };
+  });
 
   const client = new MandateClient({ mandate });
 
@@ -65,15 +66,12 @@ async function demonstrateDenylist() {
   console.log("🚫 DENYLIST ENFORCEMENT (takes precedence)");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-denylist",
-    agentId: "restricted-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with denylist
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Restricted agent with denylist",
     allowedTools: ["*"], // Allow everything...
     deniedTools: ["delete_*", "execute_*"], // ...except these
-  };
+  });
 
   const client = new MandateClient({ mandate });
 
@@ -103,14 +101,11 @@ async function demonstrateFailClosed() {
   console.log("🔒 FAIL-CLOSED (unknown = denied)");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-fail-closed",
-    agentId: "cautious-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates.restricted
+  const mandate = MandateTemplates.restricted("user@example.com", {
+    description: "Cautious agent (fail-closed)",
     allowedTools: ["read_file"], // Only this one
-  };
+  });
 
   const client = new MandateClient({ mandate });
 

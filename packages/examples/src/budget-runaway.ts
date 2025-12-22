@@ -12,7 +12,11 @@
  * - Cost is mechanically capped
  */
 
-import { MandateClient, createLLMAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createLLMAction,
+  MandateTemplates,
+} from "@mandate/sdk";
 
 // Simulated LLM that costs money
 const expensiveLLM = {
@@ -64,19 +68,16 @@ async function withMandate() {
   console.log("✅ WITH MANDATE - Budget Enforced");
   console.log("=".repeat(60) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-budget",
-    agentId: "expensive-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Budget-protected agent",
     // Key enforcement: budget cap
     maxCostTotal: 2.0, // $2 total budget
 
     defaultChargingPolicy: {
       type: "SUCCESS_BASED",
     },
-  };
+  });
 
   const client = new MandateClient({
     mandate,
