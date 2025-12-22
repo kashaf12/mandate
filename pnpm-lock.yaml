@@ -20,6 +20,9 @@ importers:
       '@mandate/sdk':
         specifier: workspace:*
         version: link:../sdk
+      ioredis:
+        specifier: ^5.3.2
+        version: 5.8.2
       openai:
         specifier: ^4.20.0
         version: 4.104.0(zod@3.25.76)

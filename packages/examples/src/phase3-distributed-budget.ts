@@ -19,6 +19,7 @@ import {
   createToolAction,
   MandateTemplates,
 } from "@mandate/sdk";
+import { validateDependencies } from "./helpers/validate-deps.js";
 
 // Simulated tool that costs money
 async function simulateExpensiveTool(
@@ -29,6 +30,13 @@ async function simulateExpensiveTool(
 }
 
 async function main() {
+  // Validate Redis is available
+  await validateDependencies({
+    redis: {
+      host: process.env.REDIS_HOST || "localhost",
+      port: parseInt(process.env.REDIS_PORT || "6379", 10),
+    },
+  });
   const processId = process.env.PROCESS_ID || "1";
   const agentId = `distributed-agent-${processId}`;
   const mandateId = process.env.MANDATE_ID || "shared-budget-mandate";

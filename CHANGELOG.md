@@ -128,5 +128,5 @@ See [FUTURE_FEATURES.md](./FUTURE_FEATURES.md) for planned features.
 
 ---
 
-[Unreleased]: https://github.com/mandate-dev/mandate-sdk/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/mandate-dev/mandate-sdk/releases/tag/v0.1.0
+[Unreleased]: https://github.com/kashaf12/mandate/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/kashaf12/mandate/releases/tag/v0.1.0

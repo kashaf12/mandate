@@ -192,6 +192,8 @@ const response = await client.executeLLMWithBudget(
 
 ## Quick Start
 
+> **📖 New to Mandate?** See [SETUP.md](./SETUP.md) for complete local development setup including Docker, Redis, and testing instructions.
+
 ### Installation
 
 ```bash
@@ -709,6 +711,8 @@ Each phase solves one or more of these invariants.
 
 ## Examples
 
+> **⚠️ Before running examples:** Some examples require Redis or LLM services. See [SETUP.md](./SETUP.md) for setup instructions.
+
 See [packages/examples](./packages/examples) for complete working examples:
 
 - **Email Agent** - Basic enforcement with verification
@@ -758,9 +762,9 @@ MIT License - see [LICENSE](./LICENSE) for details.
 
 ## Community
 
-- **GitHub**: [github.com/mandate/mandate-sdk](https://github.com/mandate/mandate-sdk)
-- **Issues**: [Report bugs or request features](https://github.com/mandate/mandate-sdk/issues)
-- **Discussions**: [Join the conversation](https://github.com/mandate/mandate-sdk/discussions)
+- **GitHub**: [github.com/kashaf12/mandate](https://github.com/kashaf12/mandate)
+- **Issues**: [Report bugs or request features](https://github.com/kashaf12/mandate/issues)
+- **Discussions**: [Join the conversation](https://github.com/kashaf12/mandate/discussions)
 
 ---
 

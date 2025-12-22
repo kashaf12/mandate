@@ -670,6 +670,6 @@ it("should track cost", async () => {
 
 ## Support
 
-**Issues:** [GitHub Issues](https://github.com/your-org/mandate/issues)
+**Issues:** [GitHub Issues](https://github.com/kashaf12/mandate/issues)
 
-**Discussions:** [GitHub Discussions](https://github.com/your-org/mandate/discussions)
+**Discussions:** [GitHub Discussions](https://github.com/kashaf12/mandate/discussions)

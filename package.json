@@ -7,19 +7,24 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kashaf12/mandate-sdk.git"
+    "url": "git+https://github.com/kashaf12/mandate.git"
   },
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "build": "pnpm --filter @mandate/sdk build",
-    "test": "pnpm --filter @mandate/sdk test",
+    "test": "pnpm docker:start && pnpm --filter @mandate/sdk test",
     "test:watch": "pnpm --filter @mandate/sdk test:watch",
-    "test:coverage": "pnpm --filter @mandate/sdk test:coverage",
+    "test:coverage": "pnpm docker:start && pnpm --filter @mandate/sdk test:coverage",
+    "test:integration": "pnpm docker:start && pnpm --filter @mandate/sdk test:integration",
     "type-check": "pnpm --filter @mandate/sdk type-check",
     "examples": "pnpm --filter @mandate/examples run:all-examples",
-    "clean": "pnpm --filter @mandate/sdk clean"
+    "clean": "pnpm --filter @mandate/sdk clean",
+    "docker:start": "cd packages/sdk && docker compose up -d",
+    "docker:stop": "cd packages/sdk && docker compose down",
+    "docker:logs": "cd packages/sdk && docker compose logs -f redis",
+    "docker:status": "docker ps --filter name=redis --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

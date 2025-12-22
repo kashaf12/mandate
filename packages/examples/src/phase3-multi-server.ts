@@ -19,6 +19,7 @@ import {
   createToolAction,
   MandateTemplates,
 } from "@mandate/sdk";
+import { validateDependencies } from "./helpers/validate-deps.js";
 
 // Simulated tool
 async function simulateWork(): Promise<{ success: boolean }> {
@@ -27,6 +28,13 @@ async function simulateWork(): Promise<{ success: boolean }> {
 }
 
 async function runAgent() {
+  // Validate Redis is available
+  await validateDependencies({
+    redis: {
+      host: process.env.REDIS_HOST || "localhost",
+      port: parseInt(process.env.REDIS_PORT || "6379", 10),
+    },
+  });
   const agentId = `agent-${process.env.AGENT_ID || Date.now()}`;
   const mandateId = process.env.MANDATE_ID || "shared-mandate";
 
@@ -94,6 +102,14 @@ async function runAgent() {
 }
 
 async function runKiller() {
+  // Validate Redis is available
+  await validateDependencies({
+    redis: {
+      host: process.env.REDIS_HOST || "localhost",
+      port: parseInt(process.env.REDIS_PORT || "6379", 10),
+    },
+  });
+
   const mandateId = process.env.MANDATE_ID || "shared-mandate";
   const targetAgentId = process.env.TARGET_AGENT_ID || "agent-*";
 

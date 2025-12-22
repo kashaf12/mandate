@@ -7,6 +7,7 @@ import {
   ValidationPatterns,
   CommonSchemas,
 } from "@mandate/sdk";
+import { validateDependencies } from "./helpers/validate-deps.js";
 
 // The broken tool (same as before)
 const sendEmail = {
@@ -78,6 +79,12 @@ const client = new MandateClient({
 });
 
 async function runSimpleEmailAgent(task: string) {
+  // Validate LLM is available (OpenAI or Ollama)
+  const hasOpenAI = process.env.OPENAI_API_KEY;
+  await validateDependencies({
+    llm: hasOpenAI ? "openai" : "ollama",
+  });
+
   const openai = new OpenAI({
     baseURL: "http://localhost:11434/v1",
     apiKey: "ollama",

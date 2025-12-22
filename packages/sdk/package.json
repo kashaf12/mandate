@@ -7,11 +7,11 @@
   "homepage": "https://github.com/kashaf12/mandate#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kashaf12/mandate-sdk.git",
+    "url": "git+https://github.com/kashaf12/mandate.git",
     "directory": "packages/sdk"
   },
   "bugs": {
-    "url": "https://github.com/mandate-dev/mandate-sdk/issues"
+    "url": "https://github.com/kashaf12/mandate/issues"
   },
   "keywords": [
     "ai",

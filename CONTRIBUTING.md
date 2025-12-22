@@ -49,8 +49,8 @@ Thank you for your interest in contributing to Mandate SDK! This document provid
 
 ```bash
 # Clone the repository
-git clone https://github.com/mandate/mandate-sdk.git
-cd mandate-sdk
+git clone https://github.com/kashaf12/mandate.git
+cd mandate
 
 # Install dependencies
 pnpm install
@@ -437,8 +437,8 @@ By contributing to Mandate SDK, you agree that your contributions will be licens
 
 ## Questions?
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/mandate/mandate-sdk/issues)
-- **GitHub Discussions**: [Ask questions or discuss ideas](https://github.com/mandate/mandate-sdk/discussions)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/kashaf12/mandate/issues)
+- **GitHub Discussions**: [Ask questions or discuss ideas](https://github.com/kashaf12/mandate/discussions)
 - **Email**: kashaf@mandate.dev (for sensitive matters)
 
 ---

@@ -172,7 +172,7 @@ git push origin v0.1.1
 
 ### 2. Create GitHub Release
 
-- Go to: https://github.com/mandate-dev/mandate-sdk/releases/new
+- Go to: https://github.com/kashaf12/mandate/releases/new
 - Tag: `v0.1.1`
 - Title: `v0.1.1`
 - Description: Copy from CHANGELOG.md
