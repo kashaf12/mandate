@@ -9,7 +9,7 @@ export interface Mandate {
   version: number;
 
   // Identity
-  id: string;
+  readonly id: string;
   agentId: string;
   principal?: string;
   identity?: AgentIdentity; // NEW - Phase 2: Full agent identity
