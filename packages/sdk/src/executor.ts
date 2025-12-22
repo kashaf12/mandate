@@ -32,17 +32,10 @@ export async function executeWithMandate<T>(
 
   if (hasAtomicCheck) {
     // ATOMIC PATH: Use Lua script for atomic check + commit
-    console.log(
-      `[Executor] Using ATOMIC path for action ${action.id}, cost ${action.estimatedCost}`
-    );
     const atomicStateManager = stateManager as any;
     const checkResult = await atomicStateManager.checkAndCommit(
       action,
       mandate
-    );
-
-    console.log(
-      `[Executor] Atomic check result: allowed=${checkResult.allowed}, reason=${checkResult.reason}`
     );
 
     if (!checkResult.allowed) {

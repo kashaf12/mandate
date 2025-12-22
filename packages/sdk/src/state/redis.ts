@@ -295,11 +295,6 @@ export class RedisStateManager implements StateManager {
         ? `${this.keyPrefix}tool:ratelimit:${action.agentId}:${action.tool}`
         : "";
 
-    // Debug: Log before calling script
-    console.log(
-      `[RedisStateManager] checkAndCommit: actionId=${action.id}, cost=${action.estimatedCost}, stateKey=${stateKey}`
-    );
-
     const result = await this.redis.evalsha(
       this.checkAndCommitSha!,
       3, // number of keys
@@ -325,11 +320,6 @@ export class RedisStateManager implements StateManager {
     );
 
     const parsed = JSON.parse(result as string);
-
-    // Debug: Log result
-    console.log(
-      `[RedisStateManager] checkAndCommit result: allowed=${parsed.allowed}, reason=${parsed.reason}, remainingCost=${parsed.remainingCost}`
-    );
 
     return parsed;
   }
