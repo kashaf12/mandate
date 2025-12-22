@@ -12,11 +12,7 @@
  * - Cost is mechanically capped
  */
 
-import {
-  MandateClient,
-  createLLMAction,
-  MandateTemplates,
-} from "@mandate/sdk";
+import { MandateClient, createLLMAction, MandateTemplates } from "@mandate/sdk";
 
 // Simulated LLM that costs money
 const expensiveLLM = {

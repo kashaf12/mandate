@@ -18,7 +18,7 @@
     "test:watch": "pnpm --filter @mandate/sdk test:watch",
     "test:coverage": "pnpm --filter @mandate/sdk test:coverage",
     "type-check": "pnpm --filter @mandate/sdk type-check",
-    "examples": "pnpm --filter @mandate/examples example:all",
+    "examples": "pnpm --filter @mandate/examples run:all-examples",
     "clean": "pnpm --filter @mandate/sdk clean"
   },
   "devDependencies": {

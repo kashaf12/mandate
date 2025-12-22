@@ -119,7 +119,9 @@ async function runEmailAgentWithFullSDK(task: string) {
   console.log(`  ID: ${mandate.identity?.agentId}`);
   console.log(`  Principal: ${mandate.identity?.principal}`);
   console.log(`  Description: ${mandate.identity?.description}`);
-  console.log(`  Created: ${new Date(mandate.identity?.createdAt || 0).toISOString()}`);
+  console.log(
+    `  Created: ${new Date(mandate.identity?.createdAt || 0).toISOString()}`
+  );
   console.log(
     `\nBudget: $${mandate.maxCostTotal} total, $${mandate.maxCostPerCall} per call`
   );

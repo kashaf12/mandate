@@ -17,7 +17,7 @@
     "example:tool-hallucination": "tsx src/tool-hallucination.ts",
     "example:custom-pricing": "tsx src/custom-pricing.ts",
     "example:phase2": "tsx src/phase2-argument-validation.ts",
-    "example:all": "pnpm run example:email-baseline && pnpm run example:email-mandate && pnpm run example:email-simple && pnpm run example:retry-storm && pnpm run example:budget-runaway && pnpm run example:tool-permissions && pnpm run example:retry-storm-llm && pnpm run example:tool-hallucination && pnpm run example:custom-pricing"
+    "run:all-examples": "pnpm exec run-s --continue-on-error \"example:*\""
   },
   "dependencies": {
     "@mandate/sdk": "workspace:*",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "npm-run-all": "^4.1.5",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0"
   }
