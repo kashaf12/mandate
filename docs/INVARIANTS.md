@@ -6,22 +6,41 @@ Each problem reveals a deeper invariant. Solving them is your roadmap.
 
 ---
 
+## Core Enforcement Boundary: LLM vs Tool
+
+**INVARIANT:** LLM calls are non-side-effecting. All real-world effects must occur via ToolCall.
+
+- LLM calls are pure computation (no external state changes)
+- Tool calls are real-world effects (file writes, API calls, state changes)
+- The SDK enforces this boundary mechanically
+- PolicyEngine treats LLM and Tool calls differently:
+  - LLM: Cost/rate limits only (no permissions to check)
+  - Tool: Permissions, cost, rate, validation, verification
+
+This boundary is critical for authority enforcement. Without it, you cannot distinguish between harmless computation and dangerous actions.
+
+---
+
 ## Problem 1: Distributed Budget Leakage
 
 **What happens:**
+
 - Agent runs on 5 servers
 - Each server enforces $100 limit
 - Agent spends $500 total
 
 **Why it happens:**
+
 - Enforcement is local
 - Authority is assumed to be global
 - No coordination
 
 **Invariant revealed:**
+
 > Execution limits must be enforced at the agent identity level, not the infrastructure instance level.
 
 **Forces:**
+
 - Shared accounting
 - Coordination
 - Agent identity
@@ -31,11 +50,13 @@ Each problem reveals a deeper invariant. Solving them is your roadmap.
 ## Problem 2: Delegation Amplification
 
 **What happens:**
+
 - Agent A has limited authority
 - Agent A delegates to Agent B
 - Agent B performs actions Agent A could not
 
 **Why it happens:**
+
 - No concept of authority inheritance
 - No limit on delegation depth
 - No reduction of scope
@@ -44,9 +65,11 @@ Each problem reveals a deeper invariant. Solving them is your roadmap.
 A junior employee asks an intern to do something the junior wasn't allowed to do.
 
 **Invariant revealed:**
+
 > Agents cannot delegate more authority than they possess.
 
 **Forces:**
+
 - Delegation rules
 - Mandate inheritance
 - Authority reduction
@@ -56,10 +79,12 @@ A junior employee asks an intern to do something the junior wasn't allowed to do
 ## Problem 3: Identity Collapse
 
 **What happens:**
+
 - Logs say "the agent did it"
 - But: which agent? Owned by whom? Acting for whom?
 
 **Why it happens:**
+
 - Agents are treated as processes, not identities
 - No stable agent IDs
 - No ownership metadata
@@ -68,9 +93,11 @@ A junior employee asks an intern to do something the junior wasn't allowed to do
 A shared AWS root account — everything is possible, nothing is accountable.
 
 **Invariant revealed:**
+
 > Every action must be attributable to a stable agent identity.
 
 **Forces:**
+
 - Stable `agentId`
 - Principal tracking
 - Ownership metadata
@@ -80,12 +107,14 @@ A shared AWS root account — everything is possible, nothing is accountable.
 ## Problem 4: Replay & Double-Spend of Authority
 
 **What happens:**
+
 - Agent retries a tool call
 - Or replays a previous plan
 - Or crashes and resumes
 - Same "allowed" action happens twice
 
 **Why it happens:**
+
 - No notion of action uniqueness
 - No idempotency
 - Authority is not consumed
@@ -94,9 +123,11 @@ A shared AWS root account — everything is possible, nothing is accountable.
 Reusing the same signed cheque twice.
 
 **Invariant revealed:**
+
 > Authority must be consumable and non-replayable.
 
 **Forces:**
+
 - Nonce-based execution
 - Mandate state
 - Eventually: ledger-like behavior
@@ -106,6 +137,7 @@ Reusing the same signed cheque twice.
 ## Problem 5: Cross-System Trust Breakdown
 
 **What happens:**
+
 - Agent from System A calls tools in System B
 - System B has no idea:
   - Who issued this agent's authority
@@ -113,6 +145,7 @@ Reusing the same signed cheque twice.
   - Whether it's been revoked
 
 **Why it happens:**
+
 - Authority is implicit
 - No portable proof of mandate
 
@@ -120,9 +153,11 @@ Reusing the same signed cheque twice.
 Showing up at a secure building saying "Trust me, I'm allowed in."
 
 **Invariant revealed:**
+
 > Authority must be verifiable outside the issuing system.
 
 **Forces:**
+
 - Signed mandates
 - Portable credentials
 - Cross-org verification
@@ -132,12 +167,14 @@ Showing up at a secure building saying "Trust me, I'm allowed in."
 ## Problem 6: Silent Partial Failure
 
 **What happens:**
+
 - Some servers enforce limits
 - Others lag behind
 - Some actions succeed, some fail
 - Inconsistent system state
 
 **Why it happens:**
+
 - No shared source of truth
 - No convergence guarantees
 - Eventual consistency without coordination
@@ -146,9 +183,11 @@ Showing up at a secure building saying "Trust me, I'm allowed in."
 A distributed transaction without a coordinator.
 
 **Invariant revealed:**
+
 > Enforcement decisions must converge across the system.
 
 **Forces:**
+
 - Coordination
 - Eventual consistency with defined semantics
 - Or: a ledger
@@ -158,11 +197,13 @@ A distributed transaction without a coordinator.
 ## Problem 7: Human Override Without Trace
 
 **What happens:**
+
 - Engineer bypasses guardrails "temporarily"
 - No record of who did it
 - No record of why
 
 **Why it happens:**
+
 - No explicit override mechanism
 - No audit trail for exceptions
 
@@ -170,9 +211,11 @@ A distributed transaction without a coordinator.
 Breaking a seal without leaving evidence.
 
 **Invariant revealed:**
+
 > Overrides must be explicit, scoped, and auditable.
 
 **Forces:**
+
 - Override API
 - Audit trail
 - Accountability for exceptions
@@ -181,15 +224,15 @@ Breaking a seal without leaving evidence.
 
 ## Summary Table
 
-| # | Problem | Invariant | Phase |
-|---|---------|-----------|-------|
-| 1 | Distributed Budget Leakage | Limits per agent identity, not instance | 3 |
-| 2 | Delegation Amplification | Cannot delegate more than you have | 4 |
-| 3 | Identity Collapse | Every action → stable agent ID | 2 |
-| 4 | Replay / Double-Spend | Authority is consumable | 3-4 |
-| 5 | Cross-System Trust | Authority verifiable outside issuer | 5 |
-| 6 | Silent Partial Failure | Enforcement must converge | 3 |
-| 7 | Override Without Trace | Overrides are auditable | 1-2 |
+| #   | Problem                    | Invariant                               | Phase |
+| --- | -------------------------- | --------------------------------------- | ----- |
+| 1   | Distributed Budget Leakage | Limits per agent identity, not instance | 3     |
+| 2   | Delegation Amplification   | Cannot delegate more than you have      | 4     |
+| 3   | Identity Collapse          | Every action → stable agent ID          | 2     |
+| 4   | Replay / Double-Spend      | Authority is consumable                 | 3-4   |
+| 5   | Cross-System Trust         | Authority verifiable outside issuer     | 5     |
+| 6   | Silent Partial Failure     | Enforcement must converge               | 3     |
+| 7   | Override Without Trace     | Overrides are auditable                 | 1-2   |
 
 ---
 

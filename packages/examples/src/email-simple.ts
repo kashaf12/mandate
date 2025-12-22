@@ -1,4 +1,15 @@
-// Simplified example using MandateClient (Phase 2)
+/**
+ * Example: Authority Enforcement for Bulk Email
+ *
+ * Demonstrates:
+ * - Tool permission enforcement (allowlist)
+ * - Rate limiting (prevent spam/abuse)
+ * - Cost limits (prevent budget runaway)
+ * - Argument validation (restrict recipients)
+ *
+ * This example focuses on AUTHORITY enforcement, not business outcomes.
+ * The SDK enforces mechanical limits (rate, cost, scope), not delivery success.
+ */
 import OpenAI from "openai";
 import {
   MandateClient,
@@ -10,7 +21,7 @@ import {
 import { validateDependencies } from "./helpers/validate-deps.js";
 import { isError } from "./helpers/error-guards.js";
 
-// The broken tool (same as before)
+// Simulated email API
 const sendEmail = {
   name: "send_email",
   description: "Send an email to a recipient",
@@ -18,8 +29,7 @@ const sendEmail = {
     console.log(`[TOOL] send_email called with:`, args);
     return {
       status: "accepted",
-      messageId: "fake-" + Math.random().toString(36).substring(7),
-      deliveryConfirmed: false, // Delivery failed
+      messageId: "msg-" + Math.random().toString(36).substring(7),
     };
   },
 };
@@ -41,33 +51,27 @@ const SEND_EMAIL_TOOL = {
   },
 };
 
-// Simplified mandate configuration (Phase 2: Using MandateTemplates)
+// Authority-focused mandate: enforce limits, not business outcomes
 const mandate = MandateTemplates.production("user@example.com", {
-  description: "Email automation agent",
-  allowedTools: ["send_email"],
-  maxCostTotal: 1.0,
+  description: "Bulk email agent with authority limits",
+  allowedTools: ["send_email"], // Only this tool allowed
+  maxCostTotal: 1.0, // Total budget cap
 
-  // Verification with attempt-based charging
   toolPolicies: {
     send_email: {
-      maxCostPerCall: 0.05,
-      chargingPolicy: { type: "ATTEMPT_BASED" },
+      maxCostPerCall: 0.05, // Per-email cost limit
+      chargingPolicy: { type: "ATTEMPT_BASED" }, // Charge on attempt
 
-      // NEW: Phase 2 argument validation
-      argumentValidation: {
-        schema: CommonSchemas.email,
-        validate: ValidationPatterns.internalEmailOnly("example.com"),
+      // Rate limiting: prevent spam/abuse
+      rateLimit: {
+        maxCalls: 10, // Max 10 emails
+        windowMs: 60_000, // Per minute
       },
 
-      verifyResult: (ctx) => {
-        const result = ctx.result as any;
-        if (!result.deliveryConfirmed) {
-          return {
-            ok: false,
-            reason: "EMAIL_NOT_CONFIRMED: Email not delivered",
-          };
-        }
-        return { ok: true };
+      // Argument validation: restrict recipients (authority scope)
+      argumentValidation: {
+        schema: CommonSchemas.email,
+        validate: ValidationPatterns.internalEmailOnly("example.com"), // Only internal emails
       },
     },
   },
@@ -96,14 +100,23 @@ async function runSimpleEmailAgent(task: string) {
   ];
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log(`📧 SIMPLIFIED EMAIL AGENT (Phase 2)`);
+  console.log(`📧 AUTHORITY ENFORCEMENT: BULK EMAIL`);
   console.log(`${"=".repeat(60)}`);
   console.log(`Task: ${task}`);
   console.log(`\nAgent Identity:`);
   console.log(`  ID: ${mandate.identity?.agentId}`);
   console.log(`  Principal: ${mandate.identity?.principal}`);
   console.log(`  Description: ${mandate.identity?.description}`);
-  console.log(`\nBudget: $${mandate.maxCostTotal}`);
+  console.log(`\nAuthority Limits:`);
+  console.log(`  Budget: $${mandate.maxCostTotal}`);
+  console.log(
+    `  Rate: ${
+      mandate.toolPolicies?.send_email?.rateLimit?.maxCalls
+    } emails per ${
+      (mandate.toolPolicies?.send_email?.rateLimit?.windowMs || 0) / 1000
+    }s`
+  );
+  console.log(`  Scope: Internal emails only (example.com)`);
   console.log(`${"=".repeat(60)}\n`);
 
   let iteration = 0;

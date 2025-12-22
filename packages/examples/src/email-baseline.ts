@@ -1,5 +1,15 @@
-// Baseline agent that demonstrates silent partial failure
-// This agent will claim success even when email delivery is not confirmed
+/**
+ * Baseline: Agent Without Authority Enforcement
+ *
+ * This example shows what happens WITHOUT Mandate SDK:
+ * - No tool permission checks
+ * - No rate limiting
+ * - No cost limits
+ * - No argument validation
+ * - No audit trail
+ *
+ * This is the baseline for comparison with authority-enforced examples.
+ */
 
 import OpenAI from "openai";
 

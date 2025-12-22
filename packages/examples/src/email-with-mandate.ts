@@ -1,4 +1,17 @@
-// Complete Mandate SDK integration - all 7 layers (Phase 2)
+/**
+ * Example: Full Authority Enforcement (All 7 Layers)
+ *
+ * Demonstrates complete Mandate SDK integration:
+ * - Tool permission enforcement (allowlist)
+ * - Rate limiting (prevent abuse)
+ * - Cost limits (budget enforcement)
+ * - Argument validation (scope restriction)
+ * - Audit logging (decision trail)
+ * - Kill switch (emergency stop)
+ *
+ * This example focuses on AUTHORITY enforcement, not business outcomes.
+ * The SDK enforces mechanical limits (rate, cost, scope), not delivery success.
+ */
 import OpenAI from "openai";
 import {
   PolicyEngine,
@@ -15,19 +28,15 @@ import {
 } from "@mandate/sdk";
 import { isError } from "./helpers/error-guards.js";
 
-// The broken tool (simulates real-world API that lies about success)
+// Simulated email API
 const sendEmail = {
   name: "send_email",
   description: "Send an email to a recipient",
   execute: async (args: { to: string; subject: string; body: string }) => {
     console.log(`[TOOL] send_email called with:`, args);
-
-    // Simulate API returning 202 Accepted
-    // But email is never delivered (spam filter, invalid domain, etc.)
     return {
       status: "accepted",
-      messageId: "fake-" + Math.random().toString(36).substring(7),
-      deliveryConfirmed: false, // This is the failure
+      messageId: "msg-" + Math.random().toString(36).substring(7),
     };
   },
 };
@@ -49,45 +58,39 @@ const SEND_EMAIL_TOOL = {
   },
 };
 
-// Real Mandate SDK configuration with all features (Phase 2: Using MandateTemplates)
-const mandate = MandateTemplates.production("kashafaahmed@gmail.com", {
-  description: "Email automation agent with full SDK integration",
-  allowedTools: ["send_email"],
+// Authority-focused mandate: enforce limits, not business outcomes
+const mandate = MandateTemplates.production("user@example.com", {
+  description: "Bulk email agent with full authority enforcement",
+  allowedTools: ["send_email"], // Only this tool allowed
   deniedTools: [],
 
-  // Limits (Layer 1)
-  maxCostTotal: 1.0,
-  maxCostPerCall: 0.1,
+  // Cost limits (authority scope)
+  maxCostTotal: 1.0, // Total budget cap
+  maxCostPerCall: 0.1, // Per-call limit
 
-  // Charging Policy (Layer 2)
+  // Charging policy
   defaultChargingPolicy: {
-    type: "SUCCESS_BASED", // Only charge for successful executions
+    type: "ATTEMPT_BASED", // Charge on attempt (authority consumed)
   },
 
-  // Tool-specific policies with verification (Layer 1) + Phase 2 validation
+  // Tool-specific policies: rate limits, validation, cost
   toolPolicies: {
     send_email: {
-      maxCostPerCall: 0.05,
+      maxCostPerCall: 0.05, // Per-email cost limit
       chargingPolicy: {
-        type: "ATTEMPT_BASED", // Charge even if verification fails
+        type: "ATTEMPT_BASED", // Charge on attempt
       },
 
-      // NEW: Phase 2 argument validation
+      // Rate limiting: prevent spam/abuse (authority throttle)
+      rateLimit: {
+        maxCalls: 10, // Max 10 emails
+        windowMs: 60_000, // Per minute
+      },
+
+      // Argument validation: restrict recipients (authority scope)
       argumentValidation: {
         schema: CommonSchemas.email,
-        validate: ValidationPatterns.internalEmailOnly("mandate.dev"),
-      },
-
-      verifyResult: (ctx) => {
-        const result = ctx.result as any;
-        if (!result.deliveryConfirmed) {
-          return {
-            ok: false,
-            reason:
-              "EMAIL_NOT_CONFIRMED: Email accepted but delivery not confirmed",
-          };
-        }
-        return { ok: true };
+        validate: ValidationPatterns.internalEmailOnly("example.com"), // Only internal emails
       },
     },
   },
@@ -112,22 +115,31 @@ async function runEmailAgentWithFullSDK(task: string) {
   ];
 
   console.log(`\n${"=".repeat(80)}`);
-  console.log(`📧 EMAIL AGENT WITH FULL MANDATE SDK (All 7 Layers + Phase 2)`);
+  console.log(`📧 AUTHORITY ENFORCEMENT: FULL SDK INTEGRATION`);
   console.log(`${"=".repeat(80)}`);
   console.log(`Task: ${task}`);
   console.log(`Mandate: ${mandate.id}`);
-  console.log(`\nAgent Identity (Phase 2):`);
+  console.log(`\nAgent Identity:`);
   console.log(`  ID: ${mandate.identity?.agentId}`);
   console.log(`  Principal: ${mandate.identity?.principal}`);
   console.log(`  Description: ${mandate.identity?.description}`);
   console.log(
     `  Created: ${new Date(mandate.identity?.createdAt || 0).toISOString()}`
   );
+  console.log(`\nAuthority Limits:`);
   console.log(
-    `\nBudget: $${mandate.maxCostTotal} total, $${mandate.maxCostPerCall} per call`
+    `  Budget: $${mandate.maxCostTotal} total, $${mandate.maxCostPerCall} per call`
   );
-  console.log(`Charging: ${mandate.defaultChargingPolicy?.type}`);
-  console.log(`Audit: Console + Memory (${memoryLogger.count()} entries)`);
+  console.log(
+    `  Rate: ${
+      mandate.toolPolicies?.send_email?.rateLimit?.maxCalls
+    } emails per ${
+      (mandate.toolPolicies?.send_email?.rateLimit?.windowMs || 0) / 1000
+    }s`
+  );
+  console.log(`  Scope: Internal emails only (example.com)`);
+  console.log(`  Charging: ${mandate.defaultChargingPolicy?.type}`);
+  console.log(`  Audit: Console + Memory (${memoryLogger.count()} entries)`);
   console.log(`${"=".repeat(80)}\n`);
 
   const model = "qwen2.5:3b";

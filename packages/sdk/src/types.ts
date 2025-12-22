@@ -12,7 +12,7 @@ export interface Mandate {
   readonly id: string;
   agentId: string;
   principal?: string;
-  identity?: AgentIdentity; // NEW - Phase 2: Full agent identity
+  identity?: AgentIdentity;
   issuer?: {
     type: "human" | "service" | "system";
     id: string;
@@ -90,7 +90,7 @@ export interface ToolPolicy {
   rateLimit?: RateLimit;
   verifyResult?: ResultVerifier;
   chargingPolicy?: ChargingPolicy;
-  argumentValidation?: ArgumentValidation; // NEW - Phase 2
+  argumentValidation?: ArgumentValidation;
 }
 
 export interface RateLimit {
@@ -137,6 +137,27 @@ export type ResultVerifier = (ctx: {
 
 export type CostType = "COGNITION" | "EXECUTION";
 
+/**
+ * Base Action - Foundation for all agent actions.
+ *
+ * ACTION LIFECYCLE (conceptual, not runtime state machine):
+ * - CREATED: Action generated with unique id
+ * - AUTHORIZED: PolicyEngine evaluates → ALLOW
+ * - EXECUTING: Executor runs the action
+ * - VERIFIED: Result verification (if configured)
+ * - SETTLED: State committed (cost charged, counters updated)
+ * - REJECTED: Blocked during authorization or failed verification
+ *
+ * RETRY & REPLAY SEMANTICS:
+ * - action.id: Unique per logical intent (generated outside agent)
+ *   → New intent MUST use new id
+ *   → Retries MUST reuse same id (replay protection blocks duplicates)
+ * - idempotencyKey: Stable across retries of same logical action
+ *   → Retries MUST reuse same idempotencyKey
+ *   → New intent MUST use new idempotencyKey (or omit it)
+ * - Replay protection: seenActionIds prevents duplicate execution
+ * - Idempotency protection: seenIdempotencyKeys prevents double-charging on retries
+ */
 export interface BaseAction {
   // Identity
   id: string; // Unique per logical intent (generated outside agent)
@@ -165,6 +186,17 @@ export interface ToolCall extends BaseAction {
   costType?: "EXECUTION";
 }
 
+/**
+ * LLM Call - Non-side-effecting cognitive operation.
+ *
+ * INVARIANT: LLM calls are pure computation. They do NOT modify external state.
+ * All real-world effects (file writes, API calls, state changes) MUST occur via ToolCall.
+ *
+ * This boundary is critical for authority enforcement:
+ * - LLM calls are authorized for cost/rate limits only
+ * - Tool calls are authorized for permissions, cost, rate, and verification
+ * - The SDK enforces this boundary mechanically
+ */
 export interface LLMCall extends BaseAction {
   type: "llm_call";
   provider: "openai" | "anthropic" | "ollama" | "other";
@@ -281,8 +313,10 @@ export interface AgentState {
  * INVARIANTS (Replay Protection):
  *
  * - action.id is generated OUTSIDE the agent
- * - Retries MUST reuse idempotencyKey
- * - New intents MUST use a new id
+ * - Retries MUST reuse the same action.id (replay protection will block if already seen)
+ * - New intent MUST use a new action.id
+ * - Retries MUST reuse the same idempotencyKey (if provided)
+ * - New intent MUST use a new idempotencyKey (or omit it)
  * - seenActionIds prevents duplicate execution
  * - seenIdempotencyKeys prevents double-charging on retries
  */

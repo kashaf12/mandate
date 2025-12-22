@@ -5,6 +5,7 @@
 AI agents are becoming economic actors. They spend money, call APIs, modify infrastructure, and make decisions with real-world consequences.
 
 But they exist as **unbanked ghosts**:
+
 - Anonymous
 - Fungible
 - Prompt-constrained
@@ -28,12 +29,12 @@ Prompts are suggestions. Enforcement is mechanical.
 
 KYA (Know Your Agent) answers four questions **mechanically**:
 
-| Question | Domain |
-|----------|--------|
-| Who is this agent? | Identity |
+| Question                      | Domain    |
+| ----------------------------- | --------- |
+| Who is this agent?            | Identity  |
 | Who owns it / is responsible? | Principal |
-| What is it allowed to do? | Authority |
-| What actually happened? | Audit |
+| What is it allowed to do?     | Authority |
+| What actually happened?       | Audit     |
 
 If you cannot answer all four programmatically, you do not have KYA.
 
@@ -46,6 +47,7 @@ In financial services, non-human identities outnumber human employees **96-to-1*
 The industry built KYC infrastructure over decades. It has months to figure out KYA.
 
 Until KYA exists:
+
 - Merchants will block agents at the firewall
 - Agents cannot transact safely
 - Liability is undefined
@@ -56,12 +58,15 @@ Until KYA exists:
 ## The Destination
 
 Full KYA infrastructure:
+
 - Agents have stable, verifiable identities
 - Authority is explicit, scoped, and revocable
-- Limits apply per agent, globally (not per server)
+- Limits apply per agent, globally (not per server) - **Phase 3+**
 - Delegation is controlled and auditable
 - Actions are attributable
 - Trust can cross organizational boundaries
+
+**Note:** Phase 1 provides agent-level enforcement within a single process. Global enforcement (across multiple servers) requires Phase 3 distributed coordination.
 
 ---
 
