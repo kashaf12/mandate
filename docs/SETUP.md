@@ -129,6 +129,222 @@ docker ps | grep redis
 
 ---
 
+## Redis Data Management
+
+### Viewing Redis Data with Redis Insight
+
+**Redis Insight** is a GUI tool for viewing and managing Redis data locally.
+
+**Start Redis Insight:**
+
+```bash
+docker run -d \
+  --name redisinsight \
+  -p 5540:5540 \
+  redis/redisinsight:latest
+```
+
+**Access Redis Insight:**
+
+1. Open browser: `http://localhost:5540`
+2. Click "Add Redis Database"
+3. Enter connection details:
+   - **Host:** `host.docker.internal`
+   - **Port:** `6379`
+   - **Database Alias:** `Mandate Local` (optional)
+4. Click "Add Redis Database"
+
+**Connection string format:**
+
+```
+redis://host.docker.internal:6379
+```
+
+**Stop Redis Insight:**
+
+```bash
+docker stop redisinsight
+docker rm redisinsight
+```
+
+### Cleaning Up Redis Data
+
+**⚠️ WARNING:** All cleanup operations are **irreversible**. Use with caution.
+
+#### Option 1: Flush Everything (Fastest, Most Destructive)
+
+**For local/dev environments only.**
+
+**Using Redis Insight:**
+
+1. Open your database in Redis Insight
+2. Open CLI (bottom panel)
+3. Run:
+
+```redis
+FLUSHALL
+```
+
+**Or flush only current database:**
+
+```redis
+FLUSHDB
+```
+
+**Using redis-cli:**
+
+```bash
+# Connect to Redis
+docker exec -it $(docker ps -q -f name=redis) redis-cli
+
+# Flush all databases
+FLUSHALL
+
+# Or flush current database only
+FLUSHDB
+```
+
+**⚠️ This deletes ALL data instantly and irreversibly.**
+
+#### Option 2: Delete by Key Pattern (Recommended)
+
+**Use this when you know your key prefixes and want to avoid collateral damage.**
+
+**Mandate SDK keys typically use prefixes like:**
+
+- `mandate:state:*` - Agent state
+- `mandate:kill:*` - Kill switch state
+- `mandate:budget:*` - Budget tracking
+
+**Using redis-cli (SAFE method with SCAN):**
+
+```bash
+# Connect to Redis
+docker exec -it $(docker ps -q -f name=redis) redis-cli
+
+# Scan and delete mandate keys (safe, non-blocking)
+redis-cli --scan --pattern "mandate:*" | xargs redis-cli DEL
+```
+
+**Or delete specific prefix:**
+
+```bash
+# Delete all state keys
+redis-cli --scan --pattern "mandate:state:*" | xargs redis-cli DEL
+
+# Delete all kill switch keys
+redis-cli --scan --pattern "mandate:kill:*" | xargs redis-cli DEL
+```
+
+**⚠️ Do NOT use `KEYS` command:**
+
+```redis
+KEYS mandate:*  # ❌ BLOCKING - dangerous in production
+```
+
+**Using Redis Insight:**
+
+1. Open Keys Browser
+2. Filter by prefix (e.g., `mandate:`)
+3. Select all matching keys
+4. Click Delete
+
+**Good for small datasets, slow for millions of keys.**
+
+#### Option 3: TTL-Based Cleanup (Long-Term Solution)
+
+**If Redis keeps getting bloated, set TTLs on keys.**
+
+**Check if key has TTL:**
+
+```bash
+docker exec -it $(docker ps -q -f name=redis) redis-cli TTL "mandate:state:agent-1"
+```
+
+**Result meanings:**
+
+- `-1` = No expiration (lives forever) → **bad design**
+- `-2` = Key doesn't exist
+- `> 0` = Seconds until expiration → **good**
+
+**Set TTL on existing keys:**
+
+```bash
+# Set 1 hour expiration
+docker exec -it $(docker ps -q -f name=redis) redis-cli EXPIRE "mandate:state:agent-1" 3600
+```
+
+**Note:** Mandate SDK keys don't expire by default. Add TTL if you need automatic cleanup.
+
+#### Option 4: Reset Docker Volume (Hard Reset)
+
+**Complete wipe of Redis data (Docker only):**
+
+```bash
+# Stop Redis
+pnpm docker:stop
+
+# Remove volume (deletes all data)
+docker volume rm $(docker volume ls -q | grep redis)
+
+# Or if using docker-compose
+cd packages/sdk
+docker compose down -v  # -v removes volumes
+
+# Restart Redis (fresh start)
+pnpm docker:start
+```
+
+**This wipes:**
+
+- AOF (Append-Only File)
+- RDB snapshots
+- All keys and data
+
+**Use only if:**
+
+- You're in local/dev
+- You're 100% sure you want to lose everything
+
+### Cleanup Recommendations by Environment
+
+| Environment    | Recommended Action                   |
+| -------------- | ------------------------------------ |
+| **Local dev**  | `FLUSHALL` (fastest, zero mercy)     |
+| **Shared dev** | Delete by prefix (e.g., `mandate:*`) |
+| **Staging**    | Prefix deletion + TTL on new keys    |
+| **Production** | ❌ **NEVER bulk delete blindly**     |
+
+### Preventing Redis Bloat
+
+**If Redis keeps getting "dirty":**
+
+- ❌ You're not using TTLs
+- ❌ You're treating Redis like a database
+- ❌ You're missing key namespaces
+
+**Redis is for:**
+
+- ✅ Cache
+- ✅ Ephemeral state
+- ✅ Queues
+- ✅ Coordination
+
+**Not for:**
+
+- ❌ Long-term storage
+- ❌ Primary database
+- ❌ Permanent data
+
+**Best practices:**
+
+1. Use key prefixes (Mandate SDK uses `mandate:`)
+2. Set TTLs on volatile keys
+3. Monitor memory: `redis-cli INFO memory`
+4. Set max memory: `--maxmemory 2gb --maxmemory-policy allkeys-lru`
+
+---
+
 ## Development Workflow
 
 ### Running Tests
@@ -336,4 +552,3 @@ export MANDATE_ID=shared-mandate-id
 
 - **Issues:** [GitHub Issues](https://github.com/kashaf12/mandate/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/kashaf12/mandate/discussions)
-
