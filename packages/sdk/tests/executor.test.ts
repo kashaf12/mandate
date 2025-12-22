@@ -92,6 +92,213 @@ describe("executeWithMandate", () => {
         expect((err as MandateBlockedError).agentId).toBe("agent-1");
       }
     });
+    describe("GAP 1: Execution Lease", () => {
+      it("blocks execution that exceeds lease timeout", async () => {
+        const action: Action = {
+          type: "tool_call",
+          id: "action-1",
+          agentId: "agent-1",
+          timestamp: Date.now(),
+          tool: "read_file",
+          estimatedCost: 0.01,
+        };
+
+        mandate.allowedTools = ["read_file"];
+        mandate.toolPolicies = {
+          read_file: {
+            executionLeaseMs: 100, // 100ms lease
+          },
+        };
+
+        // Executor that takes longer than lease
+        const executor = vi.fn().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve({ data: "file contents" }), 200);
+            })
+        );
+
+        const error = await executeWithMandate(
+          action,
+          executor,
+          mandate,
+          policy,
+          stateManager
+        ).catch((e) => e);
+
+        expect(error).toBeInstanceOf(MandateBlockedError);
+        expect((error as MandateBlockedError).code).toBe("EXECUTION_TIMEOUT");
+      });
+
+      it("allows execution that completes within lease", async () => {
+        const action: Action = {
+          type: "tool_call",
+          id: "action-1",
+          agentId: "agent-1",
+          timestamp: Date.now(),
+          tool: "read_file",
+          estimatedCost: 0.01,
+        };
+
+        mandate.allowedTools = ["read_file"];
+        mandate.toolPolicies = {
+          read_file: {
+            executionLeaseMs: 500, // 500ms lease
+          },
+        };
+
+        // Executor that completes quickly
+        const executor = vi.fn().mockResolvedValue({ data: "file contents" });
+
+        const result = await executeWithMandate(
+          action,
+          executor,
+          mandate,
+          policy,
+          stateManager
+        );
+
+        expect(result).toEqual({ data: "file contents" });
+        expect(executor).toHaveBeenCalledOnce();
+      });
+
+      it("clears execution lease on successful completion", async () => {
+        const action: Action = {
+          type: "tool_call",
+          id: "action-1",
+          agentId: "agent-1",
+          timestamp: Date.now(),
+          tool: "read_file",
+          estimatedCost: 0.01,
+        };
+
+        mandate.allowedTools = ["read_file"];
+        mandate.toolPolicies = {
+          read_file: {
+            executionLeaseMs: 1000,
+          },
+        };
+
+        const executor = vi.fn().mockResolvedValue({ data: "success" });
+
+        await executeWithMandate(
+          action,
+          executor,
+          mandate,
+          policy,
+          stateManager
+        );
+
+        const state = await stateManager.get(action.agentId, mandate.id);
+        // Lease should be cleared after successful execution
+        expect(state.executionLeases?.has(action.id)).toBe(false);
+      });
+    });
+
+    describe("GAP 2: Verification Safety", () => {
+      it("handles verification that throws error", async () => {
+        const action: Action = {
+          type: "tool_call",
+          id: "action-1",
+          agentId: "agent-1",
+          timestamp: Date.now(),
+          tool: "send_email",
+          estimatedCost: 0.01,
+        };
+
+        mandate.allowedTools = ["send_email"];
+        mandate.toolPolicies = {
+          send_email: {
+            verifyResult: () => {
+              throw new Error("Verification error");
+            },
+          },
+        };
+
+        const executor = vi.fn().mockResolvedValue({ status: "sent" });
+
+        await expect(
+          executeWithMandate(action, executor, mandate, policy, stateManager)
+        ).rejects.toThrow("Verification failed");
+
+        // Should have executed
+        expect(executor).toHaveBeenCalledOnce();
+      });
+
+      it("blocks verification that exceeds timeout", async () => {
+        const action: Action = {
+          type: "tool_call",
+          id: "action-1",
+          agentId: "agent-1",
+          timestamp: Date.now(),
+          tool: "send_email",
+          estimatedCost: 0.01,
+        };
+
+        mandate.allowedTools = ["send_email"];
+        mandate.toolPolicies = {
+          send_email: {
+            verificationTimeoutMs: 100, // 100ms timeout
+            verifyResult: () => {
+              // Simulate slow verification
+              return new Promise<{ ok: boolean; reason?: string }>(
+                (resolve) => {
+                  setTimeout(() => resolve({ ok: true }), 200);
+                }
+              ) as any;
+            },
+          },
+        };
+
+        const executor = vi.fn().mockResolvedValue({ status: "sent" });
+
+        const error = await executeWithMandate(
+          action,
+          executor,
+          mandate,
+          policy,
+          stateManager
+        ).catch((e) => e);
+
+        expect(error).toBeInstanceOf(MandateBlockedError);
+        expect((error as MandateBlockedError).code).toBe(
+          "VERIFICATION_TIMEOUT"
+        );
+      });
+
+      it("allows verification that completes within timeout", async () => {
+        const action: Action = {
+          type: "tool_call",
+          id: "action-1",
+          agentId: "agent-1",
+          timestamp: Date.now(),
+          tool: "send_email",
+          estimatedCost: 0.01,
+        };
+
+        mandate.allowedTools = ["send_email"];
+        mandate.toolPolicies = {
+          send_email: {
+            verificationTimeoutMs: 500, // 500ms timeout
+            verifyResult: () => {
+              return { ok: true };
+            },
+          },
+        };
+
+        const executor = vi.fn().mockResolvedValue({ status: "sent" });
+
+        const result = await executeWithMandate(
+          action,
+          executor,
+          mandate,
+          policy,
+          stateManager
+        );
+
+        expect(result).toEqual({ status: "sent" });
+      });
+    });
   });
 
   describe("Phase 2: Execution", () => {

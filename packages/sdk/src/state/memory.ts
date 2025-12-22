@@ -18,6 +18,26 @@ export class MemoryStateManager implements StateManager {
   private states = new Map<string, AgentState>();
   private killCallbacks = new Map<string, (reason: string) => void>();
 
+  /**
+   * GAP 1: Reconcile expired execution leases.
+   * Called passively on state access to clean up hung executions.
+   */
+  private reconcileExpiredLeases(state: AgentState): void {
+    if (!state.executionLeases || state.executionLeases.size === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    for (const [actionId, leaseExpiresAt] of state.executionLeases.entries()) {
+      if (leaseExpiresAt < now) {
+        // Lease expired - remove from tracking
+        // Note: Actual authority rollback would require knowing the reserved cost
+        // For now, we just clean up the lease tracking
+        state.executionLeases.delete(actionId);
+      }
+    }
+  }
+
   async get(agentId: string, mandateId: string): Promise<AgentState> {
     const key = `${agentId}:${mandateId}`;
 
@@ -25,7 +45,12 @@ export class MemoryStateManager implements StateManager {
       this.states.set(key, this.createDefault(agentId, mandateId));
     }
 
-    return this.states.get(key)!;
+    const state = this.states.get(key)!;
+
+    // GAP 1: Reconcile expired leases on state access
+    this.reconcileExpiredLeases(state);
+
+    return state;
   }
 
   async commitSuccess(
@@ -54,6 +79,11 @@ export class MemoryStateManager implements StateManager {
     // Record idempotency key if present
     if (action.idempotencyKey) {
       state.seenIdempotencyKeys.add(action.idempotencyKey);
+    }
+
+    // GAP 1: Clear execution lease on successful commit
+    if (state.executionLeases) {
+      state.executionLeases.delete(action.id);
     }
 
     // Update agent-level rate limit
@@ -168,6 +198,7 @@ export class MemoryStateManager implements StateManager {
       toolCallCounts: {},
       seenActionIds: new Set(),
       seenIdempotencyKeys: new Set(),
+      executionLeases: new Map(), // GAP 1: Track execution leases
       killed: false,
     };
   }

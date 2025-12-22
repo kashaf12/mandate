@@ -20,12 +20,10 @@ const sendEmail = {
   execute: async (args: { to: string; subject: string; body: string }) => {
     console.log(`[TOOL] send_email called with:`, args);
 
-    // Simulate API returning 202 Accepted
-    // But email is never delivered (spam filter, invalid domain, etc.)
+    // Simulate email API
     return {
       status: "accepted",
-      messageId: "fake-" + Math.random().toString(36).substring(7),
-      // deliveryConfirmed is missing - this is the bug
+      messageId: "msg-" + Math.random().toString(36).substring(7),
     };
   },
 };
@@ -105,12 +103,7 @@ async function runEmailAgent(task: string) {
           const result = await sendEmail.execute(toolArgs);
 
           console.log(`[TOOL] Result:`, result);
-          const resultAny = result as any;
-          console.log(
-            `[TOOL] Status: ${result.status} (deliveryConfirmed: ${
-              resultAny.deliveryConfirmed || "undefined"
-            })\n`
-          );
+          console.log(`[TOOL] Status: ${result.status}\n`);
 
           messages.push({
             role: "tool",

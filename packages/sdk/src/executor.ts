@@ -27,6 +27,16 @@ export async function executeWithMandate<T>(
 ): Promise<T> {
   const startTime = Date.now();
 
+  // GAP 1: Get execution lease from tool policy
+  const toolPolicy =
+    action.type === "tool_call"
+      ? mandate.toolPolicies?.[action.tool]
+      : undefined;
+  const executionLeaseMs = toolPolicy?.executionLeaseMs;
+  const verificationTimeoutMs = toolPolicy?.verificationTimeoutMs;
+
+  // GAP 1: Reconcile expired leases before execution (passive reconciliation in state manager)
+
   // Check if stateManager supports atomic check-and-commit (RedisStateManager)
   const hasAtomicCheck = "checkAndCommit" in stateManager;
 
@@ -76,14 +86,51 @@ export async function executeWithMandate<T>(
     let result: T;
     let actualCost: number | undefined;
 
+    // GAP 1: Record execution lease if configured
+    // Note: For atomic path (Redis), lease tracking would need to be added to Lua script
+    // For now, we track it in state for reconciliation (passive cleanup)
+    if (executionLeaseMs) {
+      const atomicState = await stateManager.get(action.agentId, mandate.id);
+      if (!atomicState.executionLeases) {
+        atomicState.executionLeases = new Map();
+      }
+      const leaseExpiresAt = Date.now() + executionLeaseMs;
+      atomicState.executionLeases.set(action.id, leaseExpiresAt);
+    }
+
     // Phase 2: Execute (can fail)
     try {
-      result = await executor();
+      // GAP 1: Wrap executor with lease timeout
+      if (executionLeaseMs) {
+        result = await Promise.race([
+          executor(),
+          new Promise<T>((_, reject) => {
+            setTimeout(() => {
+              reject(
+                new Error(`Execution lease expired after ${executionLeaseMs}ms`)
+              );
+            }, executionLeaseMs);
+          }),
+        ]);
+      } else {
+        result = await executor();
+      }
 
       // Extract actual cost if present in result
       actualCost = (result as any)?.actualCost;
     } catch (executionError) {
       const error = executionError as Error;
+
+      // GAP 1: Check if this is a lease timeout
+      const isLeaseTimeout = error.message.includes("Execution lease expired");
+
+      // GAP 1: Clear lease on failure
+      if (executionLeaseMs) {
+        const atomicState = await stateManager.get(action.agentId, mandate.id);
+        if (atomicState.executionLeases) {
+          atomicState.executionLeases.delete(action.id);
+        }
+      }
 
       // Log execution failure
       if (auditLogger) {
@@ -91,8 +138,10 @@ export async function executeWithMandate<T>(
           action,
           mandate,
           "BLOCK",
-          `Execution failed: ${error.message}`,
-          undefined,
+          isLeaseTimeout
+            ? `Execution lease expired after ${executionLeaseMs}ms`
+            : `Execution failed: ${error.message}`,
+          isLeaseTimeout ? "EXECUTION_TIMEOUT" : undefined,
           action.estimatedCost,
           undefined,
           0,
@@ -101,24 +150,74 @@ export async function executeWithMandate<T>(
         await Promise.resolve(auditLogger.log(auditEntry));
       }
 
-      // Re-throw execution error
+      // Re-throw execution error (or lease timeout error)
+      if (isLeaseTimeout) {
+        throw new MandateBlockedError(
+          "EXECUTION_TIMEOUT",
+          `Execution lease expired after ${executionLeaseMs}ms`,
+          action.agentId,
+          action,
+          {
+            type: "BLOCK",
+            reason: `Execution lease expired after ${executionLeaseMs}ms`,
+            code: "EXECUTION_TIMEOUT",
+            hard: true,
+          }
+        );
+      }
       throw executionError;
     }
 
-    // Phase 3: Verify (optional)
-    const toolPolicy =
-      action.type === "tool_call"
-        ? mandate.toolPolicies?.[action.tool]
-        : undefined;
+    // GAP 1: Clear lease on successful execution
+    if (executionLeaseMs) {
+      const atomicState = await stateManager.get(action.agentId, mandate.id);
+      if (atomicState.executionLeases) {
+        atomicState.executionLeases.delete(action.id);
+      }
+    }
 
+    // Phase 3: Verify (optional)
     if (toolPolicy?.verifyResult) {
-      const verification = toolPolicy.verifyResult({
-        action,
-        result,
-        mandate,
-      });
+      // GAP 2: Wrap verification in try-catch and timeout
+      let verification: { ok: boolean; reason?: string };
+      try {
+        if (verificationTimeoutMs) {
+          // GAP 2: Timeout verification
+          verification = await Promise.race([
+            Promise.resolve(
+              toolPolicy.verifyResult({
+                action,
+                result,
+                mandate,
+              })
+            ),
+            new Promise<{ ok: false; reason: string }>((resolve) => {
+              setTimeout(() => {
+                resolve({
+                  ok: false,
+                  reason: `Verification exceeded timeout of ${verificationTimeoutMs}ms`,
+                });
+              }, verificationTimeoutMs);
+            }),
+          ]);
+        } else {
+          verification = toolPolicy.verifyResult({
+            action,
+            result,
+            mandate,
+          });
+        }
+      } catch (verificationError) {
+        // GAP 2: Catch all verification errors
+        const error = verificationError as Error;
+        verification = {
+          ok: false,
+          reason: `Verification threw error: ${error.message}`,
+        };
+      }
 
       if (!verification.ok) {
+        const isTimeout = verification.reason?.includes("exceeded timeout");
         // Log verification failure
         if (auditLogger) {
           const auditEntry = createAuditEntry(
@@ -126,7 +225,7 @@ export async function executeWithMandate<T>(
             mandate,
             "BLOCK",
             `Verification failed: ${verification.reason}`,
-            undefined,
+            isTimeout ? "VERIFICATION_TIMEOUT" : "VERIFICATION_FAILED",
             action.estimatedCost,
             undefined,
             0,
@@ -136,6 +235,20 @@ export async function executeWithMandate<T>(
         }
 
         // Throw verification error
+        if (isTimeout) {
+          throw new MandateBlockedError(
+            "VERIFICATION_TIMEOUT",
+            verification.reason || "Verification exceeded timeout",
+            action.agentId,
+            action,
+            {
+              type: "BLOCK",
+              reason: verification.reason || "Verification exceeded timeout",
+              code: "VERIFICATION_TIMEOUT",
+              hard: true,
+            }
+          );
+        }
         throw new Error(`Verification failed: ${verification.reason}`);
       }
     }
@@ -163,8 +276,8 @@ export async function executeWithMandate<T>(
   }
 
   // NON-ATOMIC PATH: Original implementation for MemoryStateManager
-  // Get current state
-  const state = await stateManager.get(action.agentId, mandate.id);
+  // Get current state (GAP 1: reconciliation happens in get() if needed)
+  let state = await stateManager.get(action.agentId, mandate.id);
 
   // Phase 1: Authorize (pure evaluation, no mutation)
   const decision = policy.evaluate(action, mandate, state);
@@ -204,11 +317,39 @@ export async function executeWithMandate<T>(
   let actualCost: number | undefined;
   let error: Error | undefined;
 
+  // GAP 1: Record execution lease if configured
+  if (executionLeaseMs) {
+    if (!state.executionLeases) {
+      state.executionLeases = new Map();
+    }
+    const leaseExpiresAt = Date.now() + executionLeaseMs;
+    state.executionLeases.set(action.id, leaseExpiresAt);
+  }
+
   // Phase 2: Execute (can fail)
   try {
-    result = await executor();
+    // GAP 1: Wrap executor with lease timeout
+    if (executionLeaseMs) {
+      result = await Promise.race([
+        executor(),
+        new Promise<T>((_, reject) => {
+          setTimeout(() => {
+            reject(
+              new Error(`Execution lease expired after ${executionLeaseMs}ms`)
+            );
+          }, executionLeaseMs);
+        }),
+      ]);
+    } else {
+      result = await executor();
+    }
     executed = true;
     executionSuccess = true;
+
+    // GAP 1: Clear lease on successful execution
+    if (executionLeaseMs && state.executionLeases) {
+      state.executionLeases.delete(action.id);
+    }
 
     // Extract actual cost if present in result
     actualCost = (result as any)?.actualCost;
@@ -216,6 +357,14 @@ export async function executeWithMandate<T>(
     executed = true;
     executionSuccess = false;
     error = executionError as Error;
+
+    // GAP 1: Check if this is a lease timeout
+    const isLeaseTimeout = error.message.includes("Execution lease expired");
+
+    // GAP 1: Clear lease on failure
+    if (executionLeaseMs && state.executionLeases) {
+      state.executionLeases.delete(action.id);
+    }
 
     // Compute cost for failed execution
     const chargingPolicy = getChargingPolicy(action, mandate);
@@ -248,8 +397,10 @@ export async function executeWithMandate<T>(
         action,
         mandate,
         "BLOCK",
-        `Execution failed: ${error.message}`,
-        undefined,
+        isLeaseTimeout
+          ? `Execution lease expired after ${executionLeaseMs}ms`
+          : `Execution failed: ${error.message}`,
+        isLeaseTimeout ? "EXECUTION_TIMEOUT" : undefined,
         action.estimatedCost,
         cost > 0 ? cost : undefined,
         state.cumulativeCost,
@@ -258,24 +409,67 @@ export async function executeWithMandate<T>(
       await Promise.resolve(auditLogger.log(auditEntry));
     }
 
-    // Re-throw execution error
+    // Re-throw execution error (or lease timeout error)
+    if (isLeaseTimeout) {
+      throw new MandateBlockedError(
+        "EXECUTION_TIMEOUT",
+        `Execution lease expired after ${executionLeaseMs}ms`,
+        action.agentId,
+        action,
+        {
+          type: "BLOCK",
+          reason: `Execution lease expired after ${executionLeaseMs}ms`,
+          code: "EXECUTION_TIMEOUT",
+          hard: true,
+        }
+      );
+    }
     throw executionError;
   }
 
   // Phase 3: Verify (optional)
-  const toolPolicy =
-    action.type === "tool_call"
-      ? mandate.toolPolicies?.[action.tool]
-      : undefined;
-
   if (toolPolicy?.verifyResult) {
-    const verification = toolPolicy.verifyResult({
-      action,
-      result,
-      mandate,
-    });
+    // GAP 2: Wrap verification in try-catch and timeout
+    let verification: { ok: boolean; reason?: string };
+    try {
+      if (verificationTimeoutMs) {
+        // GAP 2: Timeout verification
+        verification = await Promise.race([
+          Promise.resolve(
+            toolPolicy.verifyResult({
+              action,
+              result,
+              mandate,
+            })
+          ),
+          new Promise<{ ok: false; reason: string }>((resolve) => {
+            setTimeout(() => {
+              resolve({
+                ok: false,
+                reason: `Verification exceeded timeout of ${verificationTimeoutMs}ms`,
+              });
+            }, verificationTimeoutMs);
+          }),
+        ]);
+      } else {
+        verification = toolPolicy.verifyResult({
+          action,
+          result,
+          mandate,
+        });
+      }
+    } catch (verificationError) {
+      // GAP 2: Catch all verification errors
+      const error = verificationError as Error;
+      verification = {
+        ok: false,
+        reason: `Verification threw error: ${error.message}`,
+      };
+    }
 
     if (!verification.ok) {
+      verificationSuccess = false;
+      const isTimeout = verification.reason?.includes("exceeded timeout");
       verificationSuccess = false;
 
       // Compute cost for failed verification
@@ -309,7 +503,7 @@ export async function executeWithMandate<T>(
           mandate,
           "BLOCK",
           `Verification failed: ${verification.reason}`,
-          undefined,
+          isTimeout ? "VERIFICATION_TIMEOUT" : "VERIFICATION_FAILED",
           action.estimatedCost,
           cost > 0 ? cost : undefined,
           state.cumulativeCost,
@@ -319,6 +513,20 @@ export async function executeWithMandate<T>(
       }
 
       // Throw verification error
+      if (isTimeout) {
+        throw new MandateBlockedError(
+          "VERIFICATION_TIMEOUT",
+          verification.reason || "Verification exceeded timeout",
+          action.agentId,
+          action,
+          {
+            type: "BLOCK",
+            reason: verification.reason || "Verification exceeded timeout",
+            code: "VERIFICATION_TIMEOUT",
+            hard: true,
+          }
+        );
+      }
       throw new Error(`Verification failed: ${verification.reason}`);
     }
 

@@ -294,6 +294,97 @@ describe("Helper Functions", () => {
       expect(fn).not.toHaveBeenCalled();
     });
   });
+
+  describe("GAP 3: Action ID Ownership", () => {
+    it("auto-generates action ID if not provided", () => {
+      const action1 = createToolAction("agent-1", "read_file", {});
+      const action2 = createToolAction("agent-1", "read_file", {});
+
+      expect(action1.id).toBeTruthy();
+      expect(action2.id).toBeTruthy();
+      expect(action1.id).not.toBe(action2.id); // Different IDs for different calls
+      expect(action1.id).toMatch(/^tool-/);
+    });
+
+    it("uses provided action ID when given", () => {
+      const actionId = "custom-action-id-123";
+      const action = createToolAction(
+        "agent-1",
+        "read_file",
+        {},
+        0.01,
+        actionId
+      );
+
+      expect(action.id).toBe(actionId);
+    });
+
+    it("auto-generates LLM action ID if not provided", () => {
+      const action1 = createLLMAction("agent-1", "openai", "gpt-4o", 1000, 500);
+      const action2 = createLLMAction("agent-1", "openai", "gpt-4o", 1000, 500);
+
+      expect(action1.id).toBeTruthy();
+      expect(action2.id).toBeTruthy();
+      expect(action1.id).not.toBe(action2.id); // Different IDs for different calls
+      expect(action1.id).toMatch(/^llm-/);
+    });
+
+    it("uses provided LLM action ID when given", () => {
+      const actionId = "custom-llm-id-456";
+      const action = createLLMAction(
+        "agent-1",
+        "openai",
+        "gpt-4o",
+        1000,
+        500,
+        undefined,
+        actionId
+      );
+
+      expect(action.id).toBe(actionId);
+    });
+
+    it("retries must reuse same action ID for replay protection", async () => {
+      const actionId = "retry-action-123";
+      const action1 = createToolAction(
+        "agent-1",
+        "read_file",
+        {},
+        0.01,
+        actionId
+      );
+      const action2 = createToolAction(
+        "agent-1",
+        "read_file",
+        {},
+        0.01,
+        actionId
+      );
+
+      expect(action1.id).toBe(actionId);
+      expect(action2.id).toBe(actionId);
+
+      // First execution should succeed
+      const executor = vi.fn().mockResolvedValue({ data: "success" });
+      await executeTool(action1, executor, mandate, policy, stateManager);
+
+      // Retry with same ID should be blocked (replay protection)
+      await expect(
+        executeTool(action2, executor, mandate, policy, stateManager)
+      ).rejects.toThrow(MandateBlockedError);
+
+      const error = await executeTool(
+        action2,
+        executor,
+        mandate,
+        policy,
+        stateManager
+      ).catch((e) => e);
+
+      expect(error).toBeInstanceOf(MandateBlockedError);
+      expect((error as MandateBlockedError).code).toBe("DUPLICATE_ACTION");
+    });
+  });
 });
 
 describe("calculateMaxOutputTokens", () => {

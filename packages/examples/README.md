@@ -126,7 +126,7 @@ pnpm example:email-mandate
 - ✅ Layer 5: Helper functions
 - ✅ Layer 6: Audit logging (Console + Memory)
 - ✅ Layer 7: Kill switch
-- ✅ Result verification (email delivery check)
+- ✅ Rate limiting (prevent spam/abuse)
 - ✅ Charging policy (ATTEMPT_BASED)
 
 **Expected output:**
@@ -149,8 +149,9 @@ Agent killed: true
 
 **Why it blocks:**
 
-- Email API returns `accepted` but `deliveryConfirmed: false`
-- Verification fails
+- Rate limit exceeded (authority throttle)
+- Cost limit exceeded (budget enforcement)
+- Tool not allowed (permission enforcement)
 - State committed (ATTEMPT_BASED charging)
 - Agent killed to prevent retry storm
 

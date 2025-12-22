@@ -316,4 +316,61 @@ describe("MemoryStateManager", () => {
       expect(newState.cumulativeCost).toBe(0); // Fresh state
     });
   });
+
+  describe("GAP 1: Execution Lease Reconciliation", () => {
+    it("initializes with empty execution leases", async () => {
+      const state = await manager.get("agent-1", "mandate-1");
+
+      expect(state.executionLeases).toBeDefined();
+      expect(state.executionLeases?.size).toBe(0);
+    });
+
+    it("reconciles expired leases on state access", async () => {
+      const state = await manager.get("agent-1", "mandate-1");
+
+      // Add an expired lease
+      const expiredActionId = "expired-action";
+      const pastTime = Date.now() - 1000; // 1 second ago
+      state.executionLeases?.set(expiredActionId, pastTime);
+
+      // Add a valid lease
+      const validActionId = "valid-action";
+      const futureTime = Date.now() + 5000; // 5 seconds from now
+      state.executionLeases?.set(validActionId, futureTime);
+
+      expect(state.executionLeases?.size).toBe(2);
+
+      // Get state again - should reconcile expired leases
+      const reconciledState = await manager.get("agent-1", "mandate-1");
+
+      // Expired lease should be removed
+      expect(reconciledState.executionLeases?.has(expiredActionId)).toBe(false);
+      // Valid lease should remain
+      expect(reconciledState.executionLeases?.has(validActionId)).toBe(true);
+      expect(reconciledState.executionLeases?.size).toBe(1);
+    });
+
+    it("clears execution lease on successful commit", async () => {
+      const state = await manager.get("agent-1", "mandate-1");
+      const action: Action = {
+        type: "tool_call",
+        id: "action-1",
+        agentId: "agent-1",
+        timestamp: Date.now(),
+        tool: "read_file",
+        estimatedCost: 0.01,
+      };
+
+      // Set a lease
+      const leaseExpiresAt = Date.now() + 5000;
+      state.executionLeases?.set(action.id, leaseExpiresAt);
+      expect(state.executionLeases?.has(action.id)).toBe(true);
+
+      // Commit success
+      await manager.commitSuccess(action, state, { actualCost: 0.01 });
+
+      // Lease should be cleared
+      expect(state.executionLeases?.has(action.id)).toBe(false);
+    });
+  });
 });

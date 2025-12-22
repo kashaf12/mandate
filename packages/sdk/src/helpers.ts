@@ -18,6 +18,9 @@ import type { AuditLogger } from "./audit";
 
 /**
  * Generate a unique action ID.
+ *
+ * GAP 3: Action IDs are auto-generated if not provided by caller.
+ * This ensures replay protection is enforceable by contract.
  */
 function generateActionId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -26,12 +29,17 @@ function generateActionId(prefix: string): string {
 /**
  * Create an LLM action with automatic cost estimation.
  *
+ * GAP 3: Action ID is auto-generated if not provided.
+ * Retries MUST reuse the same action.id (replay protection blocks duplicates).
+ * New intent MUST use a new action.id.
+ *
  * @param agentId - Agent identifier
  * @param provider - LLM provider (openai, anthropic, ollama, etc.)
  * @param model - Model name
  * @param estimatedInputTokens - Estimated input tokens
  * @param estimatedOutputTokens - Estimated output tokens
  * @param customPricing - Optional custom pricing (overrides defaults)
+ * @param actionId - Optional action ID (auto-generated if not provided)
  * @returns LLM action ready for execution
  */
 export function createLLMAction(
@@ -40,13 +48,14 @@ export function createLLMAction(
   model: string,
   estimatedInputTokens: number,
   estimatedOutputTokens: number,
-  customPricing?: ProviderPricing
+  customPricing?: ProviderPricing,
+  actionId?: string // GAP 3: Optional action ID
 ): Action {
   const pricing = getPricing(provider, model, customPricing);
 
   return {
     type: "llm_call",
-    id: generateActionId("llm"),
+    id: actionId || generateActionId("llm"), // GAP 3: Auto-generate if missing
     agentId,
     timestamp: Date.now(),
     provider: provider as any,
@@ -61,15 +70,25 @@ export function createLLMAction(
 /**
  * Create a tool action.
  *
+ * GAP 3: Action ID is auto-generated if not provided.
+ * Retries MUST reuse the same action.id (replay protection blocks duplicates).
+ * New intent MUST use a new action.id.
+ *
  * @param agentId - Agent identifier
  * @param tool - Tool name
  * @param args - Tool arguments
  * @param estimatedCost - Estimated cost (optional)
+ * @param actionId - Optional action ID (auto-generated if not provided)
  * @returns Tool action ready for execution
  *
  * @example
  * ```typescript
+ * // New intent - auto-generates ID
  * const action = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01);
+ *
+ * // Retry - reuse same ID
+ * const retryAction = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01, action.id);
+ *
  * const result = await executeTool(action, () => sendEmail(action.args));
  * ```
  */
@@ -77,11 +96,12 @@ export function createToolAction(
   agentId: string,
   tool: string,
   args?: Record<string, unknown>,
-  estimatedCost?: number
+  estimatedCost?: number,
+  actionId?: string // GAP 3: Optional action ID
 ): Action {
   return {
     type: "tool_call",
-    id: generateActionId("tool"),
+    id: actionId || generateActionId("tool"), // GAP 3: Auto-generate if missing
     agentId,
     timestamp: Date.now(),
     tool,

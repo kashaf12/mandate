@@ -472,6 +472,7 @@ export class RedisStateManager implements StateManager {
       toolCallCounts: {},
       seenActionIds: new Set(),
       seenIdempotencyKeys: new Set(),
+      executionLeases: new Map(), // GAP 1: Track execution leases
       killed: false,
     };
   }
@@ -496,6 +497,9 @@ export class RedisStateManager implements StateManager {
       seenActionIds: JSON.stringify(Array.from(state.seenActionIds)),
       seenIdempotencyKeys: JSON.stringify(
         Array.from(state.seenIdempotencyKeys)
+      ),
+      executionLeases: JSON.stringify(
+        Array.from(state.executionLeases?.entries() || [])
       ),
       killed: state.killed ? "1" : "0",
       killedAt: state.killedAt?.toString() || "",
@@ -527,6 +531,9 @@ export class RedisStateManager implements StateManager {
       seenIdempotencyKeys: new Set(
         data.seenIdempotencyKeys ? JSON.parse(data.seenIdempotencyKeys) : []
       ),
+      executionLeases: new Map(
+        data.executionLeases ? JSON.parse(data.executionLeases) : []
+      ), // GAP 1: Track execution leases
       killed: data.killed === "1",
       killedAt: data.killedAt ? parseInt(data.killedAt, 10) : undefined,
       killedReason: data.killedReason || undefined,

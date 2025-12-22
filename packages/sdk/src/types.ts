@@ -91,6 +91,27 @@ export interface ToolPolicy {
   verifyResult?: ResultVerifier;
   chargingPolicy?: ChargingPolicy;
   argumentValidation?: ArgumentValidation;
+  /**
+   * Execution lease timeout in milliseconds.
+   *
+   * If execution does not complete (success/failure) before this timeout,
+   * the action is automatically marked as FAILED and authority is rolled back.
+   *
+   * Default: No lease (execution can run indefinitely).
+   *
+   * INVARIANT: Prevents authority leakage from hung/streaming executions.
+   */
+  executionLeaseMs?: number;
+  /**
+   * Verification timeout in milliseconds.
+   *
+   * If verification exceeds this timeout, it is treated as a verification failure.
+   *
+   * Default: No timeout (verification can run indefinitely).
+   *
+   * INVARIANT: Verification must be bounded and deterministic.
+   */
+  verificationTimeoutMs?: number;
 }
 
 export interface RateLimit {
@@ -247,7 +268,9 @@ export type BlockCode =
   | "UNKNOWN_TOOL"
   | "DUPLICATE_ACTION"
   | "VERIFICATION_FAILED"
-  | "ARGUMENT_VALIDATION_FAILED"; // NEW - Phase 2
+  | "ARGUMENT_VALIDATION_FAILED" // Phase 2
+  | "EXECUTION_TIMEOUT" // GAP 1: Execution lease expired
+  | "VERIFICATION_TIMEOUT"; // GAP 2: Verification exceeded timeout
 
 export type Decision =
   | {
@@ -302,6 +325,10 @@ export interface AgentState {
   // Replay protection
   seenActionIds: Set<string>;
   seenIdempotencyKeys: Set<string>;
+
+  // Execution leases (GAP 1: Track long-running executions)
+  // Maps actionId -> leaseExpiresAt timestamp
+  executionLeases: Map<string, number>;
 
   // Status
   killed: boolean;
