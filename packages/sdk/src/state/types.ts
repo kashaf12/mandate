@@ -1,4 +1,4 @@
-import type { Action, AgentState, RateLimit } from "../types";
+import type { Action, AgentState, RateLimit, Mandate } from "../types";
 
 /**
  * StateManager Interface
@@ -33,13 +33,15 @@ export interface StateManager {
    * @param result - Execution result (optional actualCost)
    * @param agentRateLimit - Agent-level rate limit (optional)
    * @param toolRateLimit - Tool-specific rate limit (optional)
+   * @param mandate - Mandate (optional, used for TTL management)
    */
   commitSuccess(
     action: Action,
     state: AgentState,
     result?: { actualCost?: number },
     agentRateLimit?: RateLimit,
-    toolRateLimit?: RateLimit
+    toolRateLimit?: RateLimit,
+    mandate?: Mandate
   ): Promise<void>;
 
   /**

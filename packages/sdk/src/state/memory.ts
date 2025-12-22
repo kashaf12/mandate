@@ -1,5 +1,5 @@
 import type { StateManager } from "./types";
-import type { Action, AgentState, RateLimit } from "../types";
+import type { Action, AgentState, RateLimit, Mandate } from "../types";
 
 /**
  * In-memory StateManager (Phase 2).
@@ -33,7 +33,8 @@ export class MemoryStateManager implements StateManager {
     state: AgentState,
     result?: { actualCost?: number },
     agentRateLimit?: RateLimit,
-    toolRateLimit?: RateLimit
+    toolRateLimit?: RateLimit,
+    _mandate?: Mandate // Accept for interface compatibility, not used in memory
   ): Promise<void> {
     const actualCost = result?.actualCost ?? action.estimatedCost ?? 0;
 

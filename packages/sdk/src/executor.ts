@@ -237,7 +237,8 @@ export async function executeWithMandate<T>(
         state,
         { actualCost: cost },
         mandate.rateLimit,
-        getToolRateLimit(action, mandate)
+        getToolRateLimit(action, mandate),
+        mandate
       );
     }
 

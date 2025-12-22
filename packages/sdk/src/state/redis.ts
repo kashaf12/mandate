@@ -6,6 +6,30 @@ import type { StateManager, RedisConfig } from "./types";
 import type { Action, AgentState, RateLimit, Mandate } from "../types";
 
 /**
+ * Calculate TTL in seconds for a mandate.
+ * Returns undefined if mandate has no expiration.
+ */
+function calculateTTL(mandate?: Mandate): number | undefined {
+  if (!mandate?.expiresAt) {
+    return undefined;
+  }
+
+  const now = Date.now();
+  const timeUntilExpiry = mandate.expiresAt - now;
+
+  // If already expired or expires very soon, use minimum TTL
+  if (timeUntilExpiry <= 0) {
+    return 3600; // 1 hour minimum for expired/expiring mandates
+  }
+
+  const ttlSeconds = Math.ceil(timeUntilExpiry / 1000) + 3600; // +1 hour buffer
+
+  // Only apply minimum if calculated TTL is very small (less than 1 hour)
+  // This allows short-lived mandates to have appropriate TTLs
+  return Math.max(ttlSeconds, 3600); // Minimum 1 hour
+}
+
+/**
  * Redis-backed StateManager (Phase 3).
  *
  * Features:
@@ -118,7 +142,7 @@ export class RedisStateManager implements StateManager {
     // If doesn't exist, create default
     if (Object.keys(data).length === 0) {
       const defaultState = this.createDefault(agentId, mandateId);
-      await this.saveState(key, defaultState);
+      await this.saveState(key, defaultState); // No mandate available in get()
       return defaultState;
     }
 
@@ -130,8 +154,9 @@ export class RedisStateManager implements StateManager {
     action: Action,
     state: AgentState,
     result?: { actualCost?: number },
-    _agentRateLimit?: RateLimit,
-    _toolRateLimit?: RateLimit
+    agentRateLimit?: RateLimit,
+    toolRateLimit?: RateLimit,
+    mandate?: Mandate
   ): Promise<void> {
     // Use atomic operations for distributed consistency
     const actualCost = result?.actualCost ?? action.estimatedCost ?? 0;
@@ -164,8 +189,105 @@ export class RedisStateManager implements StateManager {
       }
     }
 
-    // Atomic increment for call count
-    await this.redis.hincrby(key, "callCount", 1);
+    // Update agent-level rate limit with window checking
+    if (agentRateLimit) {
+      // Read current window state from Redis
+      const windowStartStr = await this.redis.hget(key, "windowStart");
+      const callCountStr = await this.redis.hget(key, "callCount");
+      const windowStart = windowStartStr
+        ? parseInt(windowStartStr, 10)
+        : action.timestamp;
+      const callCount = callCountStr ? parseInt(callCountStr, 10) : 0;
+
+      const windowEnd = windowStart + agentRateLimit.windowMs;
+
+      if (action.timestamp >= windowEnd) {
+        // Window expired - reset
+        state.windowStart = action.timestamp;
+        state.callCount = 1;
+        await this.redis.hset(key, {
+          windowStart: state.windowStart.toString(),
+          callCount: "1",
+        });
+      } else {
+        // Window active - increment
+        await this.redis.hincrby(key, "callCount", 1);
+        state.windowStart = windowStart;
+        state.callCount = callCount + 1;
+      }
+    } else {
+      // No rate limit - just increment for tracking
+      await this.redis.hincrby(key, "callCount", 1);
+      state.callCount += 1;
+    }
+
+    // Update tool-specific rate limit with window checking
+    if (action.type === "tool_call" && toolRateLimit) {
+      const tool = action.tool;
+
+      // Read current tool call counts from Redis
+      const toolCallCountsStr = await this.redis.hget(key, "toolCallCounts");
+      const toolCallCounts = toolCallCountsStr
+        ? JSON.parse(toolCallCountsStr)
+        : {};
+
+      const toolCount = toolCallCounts[tool];
+
+      if (!toolCount) {
+        // First call for this tool
+        toolCallCounts[tool] = {
+          count: 1,
+          windowStart: action.timestamp,
+        };
+      } else {
+        const windowEnd = toolCount.windowStart + toolRateLimit.windowMs;
+
+        if (action.timestamp >= windowEnd) {
+          // Window expired - reset
+          toolCallCounts[tool] = {
+            count: 1,
+            windowStart: action.timestamp,
+          };
+        } else {
+          // Window active - increment
+          toolCount.count += 1;
+          toolCallCounts[tool] = toolCount;
+        }
+      }
+
+      // Update Redis with tool call counts
+      await this.redis.hset(
+        key,
+        "toolCallCounts",
+        JSON.stringify(toolCallCounts)
+      );
+
+      // Update local state
+      state.toolCallCounts = toolCallCounts;
+    } else if (action.type === "tool_call") {
+      // Track tool calls even without rate limit
+      const tool = action.tool;
+      const toolCallCountsStr = await this.redis.hget(key, "toolCallCounts");
+      const toolCallCounts = toolCallCountsStr
+        ? JSON.parse(toolCallCountsStr)
+        : {};
+
+      if (!toolCallCounts[tool]) {
+        toolCallCounts[tool] = {
+          count: 1,
+          windowStart: action.timestamp,
+        };
+      } else {
+        toolCallCounts[tool].count += 1;
+      }
+
+      await this.redis.hset(
+        key,
+        "toolCallCounts",
+        JSON.stringify(toolCallCounts)
+      );
+      state.toolCallCounts = toolCallCounts;
+    }
 
     // Update local state object for consistency
     state.cumulativeCost += actualCost;
@@ -178,7 +300,12 @@ export class RedisStateManager implements StateManager {
     if (action.idempotencyKey) {
       state.seenIdempotencyKeys.add(action.idempotencyKey);
     }
-    state.callCount += 1;
+
+    // Refresh TTL if mandate has expiration
+    const ttl = calculateTTL(mandate);
+    if (ttl !== undefined) {
+      await this.redis.expire(key, ttl);
+    }
   }
 
   /**
@@ -196,7 +323,7 @@ export class RedisStateManager implements StateManager {
     state.killedReason = killReason;
 
     const key = this.stateKey(state.agentId, state.mandateId);
-    await this.saveState(key, state);
+    await this.saveState(key, state); // No mandate available in kill()
 
     // Broadcast kill to all servers
     const channel = `${this.keyPrefix}kill:broadcast`;
@@ -316,7 +443,8 @@ export class RedisStateManager implements StateManager {
       (action.type === "tool_call" &&
         mandate.toolPolicies?.[action.tool]?.rateLimit?.windowMs?.toString()) ||
         "",
-      action.timestamp.toString()
+      action.timestamp.toString(),
+      mandate.expiresAt?.toString() || ""
     );
 
     const parsed = JSON.parse(result as string);
@@ -348,7 +476,11 @@ export class RedisStateManager implements StateManager {
     };
   }
 
-  private async saveState(key: string, state: AgentState): Promise<void> {
+  private async saveState(
+    key: string,
+    state: AgentState,
+    mandate?: Mandate
+  ): Promise<void> {
     // Convert state to Redis hash
     await this.redis.hset(key, {
       agentId: state.agentId,
@@ -369,6 +501,12 @@ export class RedisStateManager implements StateManager {
       killedAt: state.killedAt?.toString() || "",
       killedReason: state.killedReason || "",
     });
+
+    // Set TTL if mandate has expiration
+    const ttl = calculateTTL(mandate);
+    if (ttl !== undefined) {
+      await this.redis.expire(key, ttl);
+    }
   }
 
   private parseState(data: Record<string, string>): AgentState {

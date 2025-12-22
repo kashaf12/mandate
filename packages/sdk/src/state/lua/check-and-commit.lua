@@ -24,6 +24,7 @@
   ARGV[9] = toolRateLimit.maxCalls (number, optional)
   ARGV[10] = toolRateLimit.windowMs (number, optional)
   ARGV[11] = timestamp (number)
+  ARGV[12] = mandate.expiresAt (number, optional)
   
   Returns:
   {
@@ -51,6 +52,7 @@ local agentWindowMs = ARGV[8] and tonumber(ARGV[8]) or nil
 local toolMaxCalls = ARGV[9] and tonumber(ARGV[9]) or nil
 local toolWindowMs = ARGV[10] and tonumber(ARGV[10]) or nil
 local timestamp = tonumber(ARGV[11]) or 0
+local expiresAt = ARGV[12] and tonumber(ARGV[12]) or nil
 
 -- Helper: Create response
 local function createResponse(allowed, reason, code, remainingCost, remainingCalls)
@@ -238,6 +240,9 @@ redis.call('HSET', stateKey, 'windowStart', tostring(windowStart))
 -- Update tool rate limit (add to sorted set)
 if toolMaxCalls and toolWindowMs then
   redis.call('ZADD', toolRateLimitKey, timestamp, actionId)
+  -- Set TTL to 2x window size (in seconds) for automatic cleanup
+  local ttlSeconds = math.ceil((toolWindowMs * 2) / 1000)
+  redis.call('EXPIRE', toolRateLimitKey, ttlSeconds)
 end
 
 -- Calculate remaining (use the cumulativeCost from the if/else block above)
@@ -245,6 +250,22 @@ end
 local finalCumulativeCost = tonumber(redis.call('HGET', stateKey, 'cumulativeCost')) or 0
 local remainingCost = maxCostTotal and (tonumber(maxCostTotal) - finalCumulativeCost) or nil
 local remainingCalls = agentMaxCalls and (agentMaxCalls - callCount - 1) or nil
+
+-- Set TTL on state key if mandate has expiration
+if expiresAt then
+  local now = timestamp
+  local timeUntilExpiry = expiresAt - now
+  
+  if timeUntilExpiry > 0 then
+    local ttlSeconds = math.ceil(timeUntilExpiry / 1000) + 3600 -- +1 hour buffer
+    -- Minimum 1 hour
+    ttlSeconds = math.max(ttlSeconds, 3600)
+    redis.call('EXPIRE', stateKey, ttlSeconds)
+  else
+    -- Already expired, set minimum TTL
+    redis.call('EXPIRE', stateKey, 3600)
+  end
+end
 
 return createResponse(true, 'All checks passed', nil, remainingCost, remainingCalls)
 
