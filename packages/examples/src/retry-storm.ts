@@ -109,12 +109,16 @@ async function withMandate() {
 
   let retries = 0;
 
+  // GAP 1: Use idempotencyKey for retries (same key = same actionId)
+  const idempotencyKey = "retry-email-" + Date.now();
+
   while (true) {
     const action = createToolAction(
       "email-agent",
       "send_email",
       { to: "user@example.com", subject: "Test" },
-      0.01 // $0.01 per attempt
+      0.01, // $0.01 per attempt
+      { idempotencyKey } // GAP 1: Deterministic ID for retries
     );
 
     try {

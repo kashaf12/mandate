@@ -308,13 +308,9 @@ describe("Helper Functions", () => {
 
     it("uses provided action ID when given", () => {
       const actionId = "custom-action-id-123";
-      const action = createToolAction(
-        "agent-1",
-        "read_file",
-        {},
-        0.01,
-        actionId
-      );
+      const action = createToolAction("agent-1", "read_file", {}, 0.01, {
+        actionId,
+      });
 
       expect(action.id).toBe(actionId);
     });
@@ -338,7 +334,7 @@ describe("Helper Functions", () => {
         1000,
         500,
         undefined,
-        actionId
+        { actionId }
       );
 
       expect(action.id).toBe(actionId);
@@ -346,20 +342,12 @@ describe("Helper Functions", () => {
 
     it("retries must reuse same action ID for replay protection", async () => {
       const actionId = "retry-action-123";
-      const action1 = createToolAction(
-        "agent-1",
-        "read_file",
-        {},
-        0.01,
-        actionId
-      );
-      const action2 = createToolAction(
-        "agent-1",
-        "read_file",
-        {},
-        0.01,
-        actionId
-      );
+      const action1 = createToolAction("agent-1", "read_file", {}, 0.01, {
+        actionId,
+      });
+      const action2 = createToolAction("agent-1", "read_file", {}, 0.01, {
+        actionId,
+      });
 
       expect(action1.id).toBe(actionId);
       expect(action2.id).toBe(actionId);

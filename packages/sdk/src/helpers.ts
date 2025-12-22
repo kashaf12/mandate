@@ -16,22 +16,48 @@ import type { PolicyEngine } from "./policy";
 import type { StateManager as IStateManager } from "./state/types";
 import type { AuditLogger } from "./audit";
 
+import { createHash, randomBytes } from "crypto";
+
 /**
- * Generate a unique action ID.
+ * GAP 1: Generate a cryptographically strong action ID.
  *
- * GAP 3: Action IDs are auto-generated if not provided by caller.
- * This ensures replay protection is enforceable by contract.
+ * If idempotencyKey is provided, generates a deterministic ID from it.
+ * This ensures retries with the same idempotencyKey produce the same actionId.
+ *
+ * @param prefix - Action type prefix (e.g., "tool", "llm")
+ * @param idempotencyKey - Optional key for deterministic ID generation
+ * @returns Cryptographically strong action ID
  */
-function generateActionId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+function generateActionId(prefix: string, idempotencyKey?: string): string {
+  if (idempotencyKey) {
+    // GAP 1: Deterministic ID from idempotencyKey (same key = same ID)
+    const hash = createHash("sha256")
+      .update(`${prefix}:${idempotencyKey}`)
+      .digest("hex")
+      .substring(0, 16);
+    return `${prefix}-${hash}`;
+  }
+
+  // GAP 1: Cryptographically strong random ID for new intents
+  // Use Node.js crypto.randomBytes for strong randomness
+  const randomBytesHex = randomBytes(16).toString("hex");
+  return `${prefix}-${randomBytesHex}`;
 }
 
 /**
- * Create an LLM action with automatic cost estimation.
+ * GAP 1: Canonical factory for LLM actions.
  *
- * GAP 3: Action ID is auto-generated if not provided.
- * Retries MUST reuse the same action.id (replay protection blocks duplicates).
- * New intent MUST use a new action.id.
+ * **CRITICAL**: Use this factory instead of manually constructing Action objects.
+ * Manual construction bypasses replay protection and idempotency guarantees.
+ *
+ * Action ID generation:
+ * - If idempotencyKey provided: Deterministic ID (same key = same ID)
+ * - If actionId provided: Uses provided ID (for explicit control)
+ * - Otherwise: Cryptographically strong random ID
+ *
+ * Retry semantics:
+ * - Retries MUST reuse the same idempotencyKey to get the same actionId
+ * - New intent MUST use a new idempotencyKey (or omit it for new random ID)
  *
  * @param agentId - Agent identifier
  * @param provider - LLM provider (openai, anthropic, ollama, etc.)
@@ -39,8 +65,23 @@ function generateActionId(prefix: string): string {
  * @param estimatedInputTokens - Estimated input tokens
  * @param estimatedOutputTokens - Estimated output tokens
  * @param customPricing - Optional custom pricing (overrides defaults)
- * @param actionId - Optional action ID (auto-generated if not provided)
+ * @param options - Optional: actionId (explicit), idempotencyKey (deterministic)
  * @returns LLM action ready for execution
+ *
+ * @example
+ * ```typescript
+ * // New intent - random ID
+ * const action1 = createLLMAction('agent-1', 'openai', 'gpt-4o', 1000, 500);
+ *
+ * // Retry - same idempotencyKey = same actionId
+ * const action2 = createLLMAction('agent-1', 'openai', 'gpt-4o', 1000, 500, undefined, {
+ *   idempotencyKey: 'retry-123'
+ * });
+ * const action3 = createLLMAction('agent-1', 'openai', 'gpt-4o', 1000, 500, undefined, {
+ *   idempotencyKey: 'retry-123'
+ * });
+ * // action2.id === action3.id (deterministic)
+ * ```
  */
 export function createLLMAction(
   agentId: string,
@@ -49,13 +90,20 @@ export function createLLMAction(
   estimatedInputTokens: number,
   estimatedOutputTokens: number,
   customPricing?: ProviderPricing,
-  actionId?: string // GAP 3: Optional action ID
+  options?: {
+    actionId?: string; // Explicit action ID (overrides idempotencyKey)
+    idempotencyKey?: string; // Deterministic ID generation
+  }
 ): Action {
   const pricing = getPricing(provider, model, customPricing);
 
+  // GAP 1: Generate ID deterministically from idempotencyKey if provided
+  const actionId =
+    options?.actionId || generateActionId("llm", options?.idempotencyKey);
+
   return {
     type: "llm_call",
-    id: actionId || generateActionId("llm"), // GAP 3: Auto-generate if missing
+    id: actionId,
     agentId,
     timestamp: Date.now(),
     provider: provider as any,
@@ -64,32 +112,45 @@ export function createLLMAction(
       ? estimateCost(estimatedInputTokens, estimatedOutputTokens, pricing)
       : 0, // Default to $0 if no pricing found
     costType: "COGNITION",
+    idempotencyKey: options?.idempotencyKey, // GAP 1: Store idempotencyKey
   };
 }
 
 /**
- * Create a tool action.
+ * GAP 1: Canonical factory for tool actions.
  *
- * GAP 3: Action ID is auto-generated if not provided.
- * Retries MUST reuse the same action.id (replay protection blocks duplicates).
- * New intent MUST use a new action.id.
+ * **CRITICAL**: Use this factory instead of manually constructing Action objects.
+ * Manual construction bypasses replay protection and idempotency guarantees.
+ *
+ * Action ID generation:
+ * - If idempotencyKey provided: Deterministic ID (same key = same ID)
+ * - If actionId provided: Uses provided ID (for explicit control)
+ * - Otherwise: Cryptographically strong random ID
+ *
+ * Retry semantics:
+ * - Retries MUST reuse the same idempotencyKey to get the same actionId
+ * - New intent MUST use a new idempotencyKey (or omit it for new random ID)
  *
  * @param agentId - Agent identifier
  * @param tool - Tool name
  * @param args - Tool arguments
  * @param estimatedCost - Estimated cost (optional)
- * @param actionId - Optional action ID (auto-generated if not provided)
+ * @param options - Optional: actionId (explicit), idempotencyKey (deterministic)
  * @returns Tool action ready for execution
  *
  * @example
  * ```typescript
- * // New intent - auto-generates ID
- * const action = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01);
+ * // New intent - random ID
+ * const action1 = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01);
  *
- * // Retry - reuse same ID
- * const retryAction = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01, action.id);
- *
- * const result = await executeTool(action, () => sendEmail(action.args));
+ * // Retry - same idempotencyKey = same actionId
+ * const action2 = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01, {
+ *   idempotencyKey: 'retry-123'
+ * });
+ * const action3 = createToolAction('agent-1', 'send_email', { to: 'user@example.com' }, 0.01, {
+ *   idempotencyKey: 'retry-123'
+ * });
+ * // action2.id === action3.id (deterministic)
  * ```
  */
 export function createToolAction(
@@ -97,17 +158,25 @@ export function createToolAction(
   tool: string,
   args?: Record<string, unknown>,
   estimatedCost?: number,
-  actionId?: string // GAP 3: Optional action ID
+  options?: {
+    actionId?: string; // Explicit action ID (overrides idempotencyKey)
+    idempotencyKey?: string; // Deterministic ID generation
+  }
 ): Action {
+  // GAP 1: Generate ID deterministically from idempotencyKey if provided
+  const actionId =
+    options?.actionId || generateActionId("tool", options?.idempotencyKey);
+
   return {
     type: "tool_call",
-    id: actionId || generateActionId("tool"), // GAP 3: Auto-generate if missing
+    id: actionId,
     agentId,
     timestamp: Date.now(),
     tool,
     args,
     estimatedCost,
     costType: "EXECUTION",
+    idempotencyKey: options?.idempotencyKey, // GAP 1: Store idempotencyKey
   };
 }
 

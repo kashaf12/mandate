@@ -87,7 +87,7 @@ type Decision =
       hard: boolean; // true = terminal, false = may retry
     }
   | {
-      type: "DEFER"; // Future: human review required
+      type: "DEFER"; // GAP 3: Reserved for future use, NOT produced by current executor
       reason: string;
     };
 ```
@@ -312,31 +312,49 @@ Once an action is executed, its ID is added to the set. Subsequent attempts with
 
 ---
 
-## Mandate Lifecycle (Phase 1)
+## Mandate Lifecycle
 
-In Phase 1, a **Mandate is a declarative authority envelope** supplied to the SDK at runtime.
+### Current Implementation
 
-Although Mandates have stable identifiers, principals, and issuance timestamps, the SDK does **not** yet provide persistence, lookup, or revocation APIs.
+A **Mandate is a declarative authority envelope** supplied to the SDK at runtime.
+
+Although Mandates have stable identifiers, principals, and issuance timestamps, the SDK does **not** yet provide centralized persistence, lookup, or revocation APIs.
 
 A Mandate should be treated as:
 
-- **Logically immutable** â€” Once created, don't modify it
-- **Semantically an entity** â€” Has identity, provenance, and audit trail
-- **Operationally a configuration object** â€” Passed directly to the wrapper
+- **Logically immutable** — Once created, don't modify it
+- **Semantically an entity** — Has identity, provenance, and audit trail
+- **Operationally a configuration object** — Passed directly to the wrapper
 
-### Revocation in Phase 1
+### Enforcement Modes
 
-Revocation is achieved by **restarting or redeploying** the agent with a new Mandate.
+**Local Enforcement (MemoryStateManager):**
 
-The SDK provides a `kill()` API for emergency termination, but this does not revoke the Mandate itself â€” it marks the agent as killed in runtime state.
+- Single-process deployment
+- In-memory state (lost on restart)
+- Per-instance limits
+
+**Distributed Enforcement (RedisStateManager) - Available Now:**
+
+- Multi-process/multi-server deployment
+- Global per-agent limits via Redis
+- Atomic operations via Lua scripts
+- Distributed kill switch (Redis Pub/Sub)
+- State persistence across restarts
+
+### Revocation
+
+**Local mode:** Revocation is achieved by **restarting or redeploying** the agent with a new Mandate.
+
+**Distributed mode:** The SDK provides a `kill()` API that propagates instantly across all servers via Redis Pub/Sub.
 
 ### Future Phases
 
-Centralized issuance, revocation, and distribution are introduced in Phase 3+:
+Centralized issuance, revocation, and distribution APIs are planned for future phases:
 
-- Mandate registry
-- Distributed state coordination
-- Authority delegation
+- Mandate registry (centralized issuance)
+- Authority delegation chains
+- Cryptographic verification
 - Cryptographic verification
 
 ---

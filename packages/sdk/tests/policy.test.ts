@@ -38,6 +38,7 @@ describe("PolicyEngine", () => {
       toolCallCounts: {},
       seenActionIds: new Set(),
       seenIdempotencyKeys: new Set(),
+      executionLeases: new Map(), // GAP 1: Execution leases tracking
       killed: false,
     };
   });

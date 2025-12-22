@@ -161,6 +161,10 @@ export type CostType = "COGNITION" | "EXECUTION";
 /**
  * Base Action - Foundation for all agent actions.
  *
+ * **GAP 1 WARNING**: Do NOT manually construct Action objects.
+ * Use `createToolAction()` or `createLLMAction()` factories instead.
+ * Manual construction bypasses replay protection and idempotency guarantees.
+ *
  * ACTION LIFECYCLE (conceptual, not runtime state machine):
  * - CREATED: Action generated with unique id
  * - AUTHORIZED: PolicyEngine evaluates → ALLOW
@@ -170,22 +174,23 @@ export type CostType = "COGNITION" | "EXECUTION";
  * - REJECTED: Blocked during authorization or failed verification
  *
  * RETRY & REPLAY SEMANTICS:
- * - action.id: Unique per logical intent (generated outside agent)
- *   → New intent MUST use new id
- *   → Retries MUST reuse same id (replay protection blocks duplicates)
+ * - action.id: Unique per logical intent
+ *   → Generated deterministically from idempotencyKey (if provided)
+ *   → New intent MUST use new idempotencyKey (or omit for random ID)
+ *   → Retries MUST reuse same idempotencyKey to get same actionId
  * - idempotencyKey: Stable across retries of same logical action
  *   → Retries MUST reuse same idempotencyKey
- *   → New intent MUST use new idempotencyKey (or omit it)
+ *   → Same idempotencyKey → same actionId (deterministic)
  * - Replay protection: seenActionIds prevents duplicate execution
  * - Idempotency protection: seenIdempotencyKeys prevents double-charging on retries
  */
 export interface BaseAction {
   // Identity
-  id: string; // Unique per logical intent (generated outside agent)
+  id: string; // Unique per logical intent (use factory helpers to generate)
   agentId: string;
 
   // Replay & retry semantics
-  idempotencyKey?: string; // Stable across retries (MUST reuse for retries)
+  idempotencyKey?: string; // GAP 1: Used for deterministic actionId generation
   nonce?: string; // Logical attempt ID
 
   // Temporal
@@ -295,10 +300,15 @@ export type Decision =
       reason: string;
       retryAfterMs?: number;
       /**
-       * Reserved for future use:
+       * GAP 3: DEFER is reserved for future use and is NOT produced by the current executor.
+       *
+       * Reserved for future async workflows:
        * - Async verification
        * - Human approval workflows
        * - Distributed coordination
+       *
+       * If the executor encounters a DEFER decision, it will throw an internal error.
+       * This preserves forward compatibility without pretending the feature exists.
        */
     };
 

@@ -61,12 +61,16 @@ Full KYA infrastructure:
 
 - Agents have stable, verifiable identities
 - Authority is explicit, scoped, and revocable
-- Limits apply per agent, globally (not per server) - **Phase 3+**
+- Limits apply per agent, globally (not per server) - **Available now (RedisStateManager)**
 - Delegation is controlled and auditable
 - Actions are attributable
 - Trust can cross organizational boundaries
 
-**Note:** Phase 1 provides agent-level enforcement within a single process. Global enforcement (across multiple servers) requires Phase 3 distributed coordination.
+**Note:**
+
+- **Local enforcement:** MemoryStateManager provides agent-level enforcement within a single process
+- **Distributed enforcement:** RedisStateManager provides global enforcement across multiple servers (available now)
+- **Future:** Centralized mandate issuance, revocation APIs, and cryptographic verification
 
 ---
 

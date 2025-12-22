@@ -33,7 +33,8 @@ export async function executeWithMandate<T>(
       ? mandate.toolPolicies?.[action.tool]
       : undefined;
   const executionLeaseMs = toolPolicy?.executionLeaseMs;
-  const verificationTimeoutMs = toolPolicy?.verificationTimeoutMs;
+  // GAP 2: Default verification timeout to 50ms if not specified
+  const verificationTimeoutMs = toolPolicy?.verificationTimeoutMs ?? 50;
 
   // GAP 1: Reconcile expired leases before execution (passive reconciliation in state manager)
 
@@ -178,37 +179,45 @@ export async function executeWithMandate<T>(
 
     // Phase 3: Verify (optional)
     if (toolPolicy?.verifyResult) {
-      // GAP 2: Wrap verification in try-catch and timeout
+      // GAP 2: Wrap verification in try-catch and timeout with audit metadata
+      const verificationStartTime = Date.now();
       let verification: { ok: boolean; reason?: string };
+      let verificationOutcome: "ok" | "failed" | "timeout" | "error" = "ok";
+
       try {
-        if (verificationTimeoutMs) {
-          // GAP 2: Timeout verification
-          verification = await Promise.race([
-            Promise.resolve(
-              toolPolicy.verifyResult({
-                action,
-                result,
-                mandate,
-              })
-            ),
-            new Promise<{ ok: false; reason: string }>((resolve) => {
-              setTimeout(() => {
-                resolve({
-                  ok: false,
-                  reason: `Verification exceeded timeout of ${verificationTimeoutMs}ms`,
-                });
-              }, verificationTimeoutMs);
-            }),
-          ]);
-        } else {
-          verification = toolPolicy.verifyResult({
-            action,
-            result,
-            mandate,
-          });
+        // GAP 2: Always apply timeout (default 50ms)
+        let timeoutOccurred = false;
+        const timeoutPromise = new Promise<{ ok: false; reason: string }>(
+          (resolve) => {
+            setTimeout(() => {
+              timeoutOccurred = true;
+              resolve({
+                ok: false,
+                reason: `Verification exceeded timeout of ${verificationTimeoutMs}ms`,
+              });
+            }, verificationTimeoutMs);
+          }
+        );
+
+        verification = await Promise.race([
+          Promise.resolve(
+            toolPolicy.verifyResult({
+              action,
+              result,
+              mandate,
+            })
+          ),
+          timeoutPromise,
+        ]);
+
+        if (timeoutOccurred) {
+          verificationOutcome = "timeout";
+        } else if (!verification.ok) {
+          verificationOutcome = "failed";
         }
       } catch (verificationError) {
         // GAP 2: Catch all verification errors
+        verificationOutcome = "error";
         const error = verificationError as Error;
         verification = {
           ok: false,
@@ -216,9 +225,12 @@ export async function executeWithMandate<T>(
         };
       }
 
+      const verificationDurationMs = Date.now() - verificationStartTime;
+
       if (!verification.ok) {
-        const isTimeout = verification.reason?.includes("exceeded timeout");
-        // Log verification failure
+        const isTimeout = verificationOutcome === "timeout";
+
+        // Log verification failure with metadata
         if (auditLogger) {
           const auditEntry = createAuditEntry(
             action,
@@ -229,7 +241,11 @@ export async function executeWithMandate<T>(
             action.estimatedCost,
             undefined,
             0,
-            Date.now() - startTime
+            Date.now() - startTime,
+            {
+              verificationDurationMs,
+              verificationOutcome,
+            }
           );
           await Promise.resolve(auditLogger.log(auditEntry));
         }
@@ -281,6 +297,15 @@ export async function executeWithMandate<T>(
 
   // Phase 1: Authorize (pure evaluation, no mutation)
   const decision = policy.evaluate(action, mandate, state);
+
+  // GAP 3: DEFER is reserved for future use - defensive assertion
+  if (decision.type === "DEFER") {
+    throw new Error(
+      "DEFER decision type is reserved for future async workflows. " +
+        "Current executor does not support DEFER. " +
+        "This indicates an internal error or future feature that is not yet implemented."
+    );
+  }
 
   if (decision.type === "BLOCK") {
     // Log block decision
@@ -429,37 +454,45 @@ export async function executeWithMandate<T>(
 
   // Phase 3: Verify (optional)
   if (toolPolicy?.verifyResult) {
-    // GAP 2: Wrap verification in try-catch and timeout
+    // GAP 2: Wrap verification in try-catch and timeout with audit metadata
+    const verificationStartTime = Date.now();
     let verification: { ok: boolean; reason?: string };
+    let verificationOutcome: "ok" | "failed" | "timeout" | "error" = "ok";
+
     try {
-      if (verificationTimeoutMs) {
-        // GAP 2: Timeout verification
-        verification = await Promise.race([
-          Promise.resolve(
-            toolPolicy.verifyResult({
-              action,
-              result,
-              mandate,
-            })
-          ),
-          new Promise<{ ok: false; reason: string }>((resolve) => {
-            setTimeout(() => {
-              resolve({
-                ok: false,
-                reason: `Verification exceeded timeout of ${verificationTimeoutMs}ms`,
-              });
-            }, verificationTimeoutMs);
-          }),
-        ]);
-      } else {
-        verification = toolPolicy.verifyResult({
-          action,
-          result,
-          mandate,
-        });
+      // GAP 2: Always apply timeout (default 50ms)
+      let timeoutOccurred = false;
+      const timeoutPromise = new Promise<{ ok: false; reason: string }>(
+        (resolve) => {
+          setTimeout(() => {
+            timeoutOccurred = true;
+            resolve({
+              ok: false,
+              reason: `Verification exceeded timeout of ${verificationTimeoutMs}ms`,
+            });
+          }, verificationTimeoutMs);
+        }
+      );
+
+      verification = await Promise.race([
+        Promise.resolve(
+          toolPolicy.verifyResult({
+            action,
+            result,
+            mandate,
+          })
+        ),
+        timeoutPromise,
+      ]);
+
+      if (timeoutOccurred) {
+        verificationOutcome = "timeout";
+      } else if (!verification.ok) {
+        verificationOutcome = "failed";
       }
     } catch (verificationError) {
       // GAP 2: Catch all verification errors
+      verificationOutcome = "error";
       const error = verificationError as Error;
       verification = {
         ok: false,
@@ -467,9 +500,9 @@ export async function executeWithMandate<T>(
       };
     }
 
+    const verificationDurationMs = Date.now() - verificationStartTime;
+
     if (!verification.ok) {
-      verificationSuccess = false;
-      const isTimeout = verification.reason?.includes("exceeded timeout");
       verificationSuccess = false;
 
       // Compute cost for failed verification
@@ -496,7 +529,9 @@ export async function executeWithMandate<T>(
         );
       }
 
-      // Log verification failure
+      const isTimeout = verificationOutcome === "timeout";
+
+      // Log verification failure with metadata
       if (auditLogger) {
         const auditEntry = createAuditEntry(
           action,
@@ -507,7 +542,11 @@ export async function executeWithMandate<T>(
           action.estimatedCost,
           cost > 0 ? cost : undefined,
           state.cumulativeCost,
-          Date.now() - startTime
+          Date.now() - startTime,
+          {
+            verificationDurationMs,
+            verificationOutcome,
+          }
         );
         await Promise.resolve(auditLogger.log(auditEntry));
       }
@@ -587,11 +626,15 @@ function createAuditEntry(
   mandate: Mandate,
   decision: "ALLOW" | "BLOCK",
   reason: string,
-  blockCode?: BlockCode, // ← Changed from string to BlockCode
+  blockCode?: BlockCode,
   estimatedCost?: number,
   actualCost?: number,
   cumulativeCost?: number,
-  durationMs?: number
+  durationMs?: number,
+  verificationMetadata?: {
+    verificationDurationMs?: number;
+    verificationOutcome?: "ok" | "failed" | "timeout" | "error";
+  }
 ): AuditEntry {
   return {
     id: `audit-${Date.now()}-${Math.random().toString(36).substring(7)}`,
@@ -599,6 +642,7 @@ function createAuditEntry(
     agentId: action.agentId,
     mandateId: mandate.id,
     actionId: action.id,
+    idempotencyKey: action.idempotencyKey, // GAP 1: Include idempotencyKey in audit
     traceId: action.traceId,
     parentActionId: action.parentActionId,
     action: action.type,
@@ -611,7 +655,17 @@ function createAuditEntry(
     estimatedCost,
     actualCost,
     cumulativeCost,
-    metadata: durationMs ? { durationMs } : undefined,
+    metadata: {
+      ...(durationMs ? { durationMs } : {}),
+      ...(verificationMetadata?.verificationDurationMs
+        ? {
+            verificationDurationMs: verificationMetadata.verificationDurationMs,
+          }
+        : {}),
+      ...(verificationMetadata?.verificationOutcome
+        ? { verificationOutcome: verificationMetadata.verificationOutcome }
+        : {}),
+    },
   };
 }
 

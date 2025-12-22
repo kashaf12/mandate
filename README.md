@@ -485,19 +485,30 @@ See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
 
 ---
 
-## Phase 1 Limitations (Important)
+## Enforcement Modes
 
-### Authority Scope
+### Local Enforcement (MemoryStateManager)
 
-**In Phase 1, Mandate enforces limits per SDK instance, not globally.**
+**Default for single-process deployments.**
 
-If the same agent runs on multiple processes or servers:
+- Budgets enforced per SDK instance
+- State is in-memory (lost on restart)
+- No coordination across processes
+
+If the same agent runs on multiple processes:
 
 - Budgets are enforced independently
 - Costs may multiply across deployments
 - Rate limits are per-process
 
-**This is intentional and addressed in Phase 3 (Distributed Authority).**
+### Distributed Enforcement (RedisStateManager)
+
+**Available now - Phase 3 implementation.**
+
+- Global per-agent limits across all servers
+- Atomic budget enforcement via Redis Lua scripts
+- Distributed kill switch (Redis Pub/Sub)
+- State persistence across restarts
 
 Example:
 
@@ -505,15 +516,13 @@ Example:
 Agent "email-agent" deployed on 5 servers
 Mandate: maxCostTotal = $10
 
-Reality in Phase 1:
-- Each server enforces $10 independently
-- Agent could spend $50 total (5 × $10)
-
-Phase 3 will add:
-- Global per-agent limits
-- Distributed state coordination
-- Shared accounting
+With RedisStateManager:
+- All servers share the same $10 budget
+- Atomic operations prevent race conditions
+- Global kill switch propagates instantly
 ```
+
+**See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for setup instructions.**
 
 ### Kill Switch Scope
 
