@@ -13,7 +13,11 @@
  */
 
 import OpenAI from "openai";
-import { MandateClient, createToolAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createToolAction,
+  MandateTemplates,
+} from "@mandate/sdk";
 
 // Safe tools
 const AVAILABLE_TOOLS = {
@@ -129,18 +133,14 @@ async function withMandate() {
   console.log("✅ WITH MANDATE - Only Safe Tools Allowed");
   console.log("=".repeat(70) + "\n");
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-safe-tools",
-    agentId: "safe-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates.restricted for cleaner code
+  const mandate = MandateTemplates.restricted("user@example.com", {
+    description: "Safe read-only agent",
     maxCostTotal: 1.0,
-
     // CRITICAL: Only allow safe read operations
     allowedTools: ["read_*", "search_*"],
     deniedTools: ["delete_*", "execute_*", "drop_*"],
-  };
+  });
 
   const client = new MandateClient({ mandate, auditLogger: "memory" });
 

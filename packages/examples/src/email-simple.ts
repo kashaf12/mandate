@@ -1,6 +1,12 @@
-// Simplified example using MandateClient
+// Simplified example using MandateClient (Phase 2)
 import OpenAI from "openai";
-import { MandateClient, createToolAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createToolAction,
+  MandateTemplates,
+  ValidationPatterns,
+  CommonSchemas,
+} from "@mandate/sdk";
 
 // The broken tool (same as before)
 const sendEmail = {
@@ -33,14 +39,9 @@ const SEND_EMAIL_TOOL = {
   },
 };
 
-// Simplified mandate configuration
-const mandate: Mandate = {
-  version: 1,
-  id: "mandate-email-simple",
-  agentId: "email-agent",
-  issuedAt: Date.now(),
-
-  // Simple permissions
+// Simplified mandate configuration (Phase 2: Using MandateTemplates)
+const mandate = MandateTemplates.production("user@example.com", {
+  description: "Email automation agent",
   allowedTools: ["send_email"],
   maxCostTotal: 1.0,
 
@@ -49,6 +50,13 @@ const mandate: Mandate = {
     send_email: {
       maxCostPerCall: 0.05,
       chargingPolicy: { type: "ATTEMPT_BASED" },
+
+      // NEW: Phase 2 argument validation
+      argumentValidation: {
+        schema: CommonSchemas.email,
+        validate: ValidationPatterns.internalEmailOnly("example.com"),
+      },
+
       verifyResult: (ctx) => {
         const result = ctx.result as any;
         if (!result.deliveryConfirmed) {
@@ -61,7 +69,7 @@ const mandate: Mandate = {
       },
     },
   },
-};
+});
 
 // ✨ ONE LINE - Create client with all features
 const client = new MandateClient({
@@ -80,10 +88,14 @@ async function runSimpleEmailAgent(task: string) {
   ];
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log(`📧 SIMPLIFIED EMAIL AGENT (MandateClient)`);
+  console.log(`📧 SIMPLIFIED EMAIL AGENT (Phase 2)`);
   console.log(`${"=".repeat(60)}`);
   console.log(`Task: ${task}`);
-  console.log(`Budget: $${mandate.maxCostTotal}`);
+  console.log(`\nAgent Identity:`);
+  console.log(`  ID: ${mandate.identity?.agentId}`);
+  console.log(`  Principal: ${mandate.identity?.principal}`);
+  console.log(`  Description: ${mandate.identity?.description}`);
+  console.log(`\nBudget: $${mandate.maxCostTotal}`);
   console.log(`${"=".repeat(60)}\n`);
 
   let iteration = 0;

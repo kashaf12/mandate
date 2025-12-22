@@ -13,7 +13,12 @@
  */
 
 import OpenAI from "openai";
-import { MandateClient, createToolAction, type Mandate } from "@mandate/sdk";
+import {
+  MandateClient,
+  createToolAction,
+  MandateTemplates,
+  CommonSchemas,
+} from "@mandate/sdk";
 
 // Simulated unreliable email API
 let emailAttempts = 0;
@@ -148,12 +153,9 @@ async function withMandate() {
 
   emailAttempts = 0;
 
-  const mandate: Mandate = {
-    version: 1,
-    id: "mandate-retry-protection",
-    agentId: "email-agent",
-    issuedAt: Date.now(),
-
+  // Phase 2: Using MandateTemplates with argument validation
+  const mandate = MandateTemplates.production("user@example.com", {
+    description: "Retry-protected email agent",
     maxCostTotal: 5.0, // $5 total budget
 
     toolPolicies: {
@@ -167,9 +169,14 @@ async function withMandate() {
           type: "ATTEMPT_BASED", // Charge even on failure
         },
         maxCostPerCall: 0.01,
+
+        // NEW: Phase 2 - Validate email format BEFORE retrying
+        argumentValidation: {
+          schema: CommonSchemas.email,
+        },
       },
     },
-  };
+  });
 
   const client = new MandateClient({
     mandate,
