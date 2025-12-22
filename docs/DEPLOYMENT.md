@@ -661,10 +661,10 @@ it("should track cost", async () => {
 
 ## Additional Resources
 
-- [SDK README](./packages/sdk/README.md) - Full API documentation
-- [Examples](./packages/examples) - Working examples
+- [SDK README](../packages/sdk/README.md) - Full API documentation
+- [Examples](../packages/examples) - Working examples
 - [Architecture Guide](./ARCHITECTURE.md) - System design
-- [Vision](./docs/VISION.md) - Project goals
+- [Vision](./VISION.md) - Project goals
 
 ---
 

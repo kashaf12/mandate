@@ -18,6 +18,7 @@ import {
   createToolAction,
   MandateTemplates,
 } from "@mandate/sdk";
+import { isMandateBlockedError } from "./helpers/error-guards.js";
 
 // Safe tools
 const AVAILABLE_TOOLS = {
@@ -193,8 +194,8 @@ async function withMandate() {
           });
           console.log(`  ✅ ALLOWED - Tool executed`);
         }
-      } catch (error: any) {
-        if (error.name === "MandateBlockedError") {
+      } catch (error: unknown) {
+        if (isMandateBlockedError(error)) {
           console.log(`  🛑 BLOCKED: ${error.reason}`);
           console.log(`  🛡️  Mandate prevented dangerous operation`);
         }

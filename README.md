@@ -192,7 +192,7 @@ const response = await client.executeLLMWithBudget(
 
 ## Quick Start
 
-> **📖 New to Mandate?** See [SETUP.md](./SETUP.md) for complete local development setup including Docker, Redis, and testing instructions.
+> **📖 New to Mandate?** See [docs/SETUP.md](./docs/SETUP.md) for complete local development setup including Docker, Redis, and testing instructions.
 
 ### Installation
 
@@ -671,7 +671,7 @@ const client = new MandateClient({
 });
 ```
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment guide.
+See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment guide.
 
 ### Phase 4: Delegation & Responsibility (Q3 2025)
 
@@ -711,7 +711,7 @@ Each phase solves one or more of these invariants.
 
 ## Examples
 
-> **⚠️ Before running examples:** Some examples require Redis or LLM services. See [SETUP.md](./SETUP.md) for setup instructions.
+> **⚠️ Before running examples:** Some examples require Redis or LLM services. See [docs/SETUP.md](./docs/SETUP.md) for setup instructions.
 
 See [packages/examples](./packages/examples) for complete working examples:
 

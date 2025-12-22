@@ -17,6 +17,7 @@ import {
   createToolAction,
   MandateTemplates,
 } from "@mandate/sdk";
+import { isError } from "./helpers/error-guards.js";
 
 // Simulated tools
 const tools = {
@@ -46,8 +47,9 @@ async function demonstrateAllowlist() {
     const action = createToolAction("safe-agent", "read_file", {});
     await client.executeTool(action, () => tools.read_file({}));
     console.log("  ✅ ALLOWED\n");
-  } catch (error: any) {
-    console.log(`  ❌ BLOCKED: ${error.message}\n`);
+  } catch (error: unknown) {
+    const message = isError(error) ? error.message : String(error);
+    console.log(`  ❌ BLOCKED: ${message}\n`);
   }
 
   // Try disallowed tool
@@ -56,8 +58,9 @@ async function demonstrateAllowlist() {
     const action = createToolAction("safe-agent", "delete_file", {});
     await client.executeTool(action, () => tools.delete_file({}));
     console.log("  ✅ ALLOWED\n");
-  } catch (error: any) {
-    console.log(`  ❌ BLOCKED: ${error.message}\n`);
+  } catch (error: unknown) {
+    const message = isError(error) ? error.message : String(error);
+    console.log(`  ❌ BLOCKED: ${message}\n`);
   }
 }
 
@@ -81,8 +84,9 @@ async function demonstrateDenylist() {
     const action = createToolAction("restricted-agent", "read_file", {});
     await client.executeTool(action, () => tools.read_file({}));
     console.log("  ✅ ALLOWED\n");
-  } catch (error: any) {
-    console.log(`  ❌ BLOCKED: ${error.message}\n`);
+  } catch (error: unknown) {
+    const message = isError(error) ? error.message : String(error);
+    console.log(`  ❌ BLOCKED: ${message}\n`);
   }
 
   // Try denied tool
@@ -91,8 +95,9 @@ async function demonstrateDenylist() {
     const action = createToolAction("restricted-agent", "execute_shell", {});
     await client.executeTool(action, () => tools.execute_shell({}));
     console.log("  ✅ ALLOWED\n");
-  } catch (error: any) {
-    console.log(`  ❌ BLOCKED: ${error.message}\n`);
+  } catch (error: unknown) {
+    const message = isError(error) ? error.message : String(error);
+    console.log(`  ❌ BLOCKED: ${message}\n`);
   }
 }
 
@@ -114,8 +119,9 @@ async function demonstrateFailClosed() {
     const action = createToolAction("cautious-agent", "unknown_tool", {});
     await client.executeTool(action, async () => ({ result: "success" }));
     console.log("  ✅ ALLOWED\n");
-  } catch (error: any) {
-    console.log(`  ❌ BLOCKED: ${error.message}`);
+  } catch (error: unknown) {
+    const message = isError(error) ? error.message : String(error);
+    console.log(`  ❌ BLOCKED: ${message}`);
     console.log(`  Reason: Fail-closed - if not explicitly allowed, denied\n`);
   }
 }

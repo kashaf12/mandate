@@ -19,6 +19,7 @@ import {
   MandateTemplates,
   CommonSchemas,
 } from "@mandate/sdk";
+import { isMandateBlockedError, isError } from "./helpers/error-guards.js";
 
 // Simulated unreliable email API
 let emailAttempts = 0;
@@ -119,13 +120,14 @@ async function withoutMandate() {
               `⚠️  No mechanical limit - agent could have retried forever\n`
             );
             return;
-          } catch (error: any) {
-            console.log(`  ❌ Failed: ${error.message}`);
+          } catch (error: unknown) {
+            const message = isError(error) ? error.message : String(error);
+            console.log(`  ❌ Failed: ${message}`);
 
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: error.message }),
+              content: JSON.stringify({ error: isError(error) ? error.message : String(error) }),
             });
           }
         }
@@ -287,8 +289,8 @@ async function withMandate() {
             console.log(`📊 Total attempts: ${emailAttempts}`);
             console.log(`🛡️  Rate limit prevented infinite retries\n`);
             return;
-          } catch (error: any) {
-            if (error.name === "MandateBlockedError") {
+          } catch (error: unknown) {
+            if (isMandateBlockedError(error)) {
               console.log(`\n🛑 MANDATE BLOCKED: ${error.reason}`);
               const finalCost = await client.getCost();
               console.log(`💰 Final cost: $${finalCost.total.toFixed(2)}`);
@@ -318,12 +320,13 @@ async function withMandate() {
               return;
             }
 
-            console.log(`  ❌ Failed: ${error.message}`);
+            const message = isError(error) ? error.message : String(error);
+            console.log(`  ❌ Failed: ${message}`);
 
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: error.message }),
+              content: JSON.stringify({ error: isError(error) ? error.message : String(error) }),
             });
           }
         }

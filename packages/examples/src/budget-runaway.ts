@@ -13,6 +13,7 @@
  */
 
 import { MandateClient, createLLMAction, MandateTemplates } from "@mandate/sdk";
+import { isMandateBlockedError } from "./helpers/error-guards.js";
 
 // Simulated LLM that costs money
 const expensiveLLM = {
@@ -109,8 +110,8 @@ async function withMandate() {
 
       const cost = await client.getCost();
       console.log(`  ✅ Success - Cost: $${cost.total.toFixed(2)}`);
-    } catch (error: any) {
-      if (error.name === "MandateBlockedError") {
+    } catch (error: unknown) {
+      if (isMandateBlockedError(error)) {
         const cost = await client.getCost();
         console.log(`\n🛑 BLOCKED: ${error.reason}`);
         console.log(`💰 Final cost: $${cost.total.toFixed(2)}`);

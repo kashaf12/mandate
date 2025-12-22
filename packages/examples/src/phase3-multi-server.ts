@@ -20,6 +20,7 @@ import {
   MandateTemplates,
 } from "@mandate/sdk";
 import { validateDependencies } from "./helpers/validate-deps.js";
+import { isMandateBlockedError } from "./helpers/error-guards.js";
 
 // Simulated tool
 async function simulateWork(): Promise<{ success: boolean }> {
@@ -86,8 +87,8 @@ async function runAgent() {
     try {
       await client.executeTool(action, simulateWork);
       console.log(`[Agent ${agentId}] Iteration ${iteration}: Working...`);
-    } catch (error: any) {
-      if (error.name === "MandateBlockedError") {
+    } catch (error: unknown) {
+      if (isMandateBlockedError(error)) {
         console.log(`[Agent ${agentId}] Blocked: ${error.reason}`);
         break;
       } else {

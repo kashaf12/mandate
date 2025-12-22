@@ -8,6 +8,7 @@ import {
   CommonSchemas,
 } from "@mandate/sdk";
 import { validateDependencies } from "./helpers/validate-deps.js";
+import { isError } from "./helpers/error-guards.js";
 
 // The broken tool (same as before)
 const sendEmail = {
@@ -171,13 +172,17 @@ async function runSimpleEmailAgent(task: string) {
               tool_call_id: toolCall.id,
               content: JSON.stringify(result),
             });
-          } catch (error: any) {
-            console.log(`\n[ERROR] 🚫 ${error.message}\n`);
+          } catch (error: unknown) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.log(`\n[ERROR] 🚫 ${message}\n`);
 
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: error.message }),
+              content: JSON.stringify({
+                error: isError(error) ? error.message : String(error),
+              }),
             });
           }
         }

@@ -43,7 +43,7 @@ npm version patch
 pnpm version patch
 ```
 
-### 3. Update CHANGELOG.md
+### 3. Update docs/CHANGELOG.md
 
 - Add release date
 - Move items from [Unreleased] to new version section
@@ -52,7 +52,7 @@ pnpm version patch
 ### 4. Commit Version Bump
 
 ```bash
-git add packages/sdk/package.json CHANGELOG.md
+git add packages/sdk/package.json docs/CHANGELOG.md
 git commit -m "chore: release v0.1.1"
 git tag v0.1.1
 ```
@@ -175,7 +175,7 @@ git push origin v0.1.1
 - Go to: https://github.com/kashaf12/mandate/releases/new
 - Tag: `v0.1.1`
 - Title: `v0.1.1`
-- Description: Copy from CHANGELOG.md
+- Description: Copy from docs/CHANGELOG.md
 - Attach: None needed
 - Publish release
 
@@ -283,3 +283,4 @@ npm deprecate @mandate/sdk@0.1.1 "Security vulnerability - upgrade to 0.1.2"
 - **npm issues:** https://docs.npmjs.com/
 - **Semantic versioning:** https://semver.org/
 - **Keep a Changelog:** https://keepachangelog.com/
+

@@ -20,6 +20,7 @@ import {
   MandateTemplates,
 } from "@mandate/sdk";
 import { validateDependencies } from "./helpers/validate-deps.js";
+import { isMandateBlockedError } from "./helpers/error-guards.js";
 
 // Simulated tool that costs money
 async function simulateExpensiveTool(
@@ -100,8 +101,8 @@ async function main() {
           remaining?.toFixed(2) || "0.00"
         }`
       );
-    } catch (error: any) {
-      if (error.name === "MandateBlockedError") {
+    } catch (error: unknown) {
+      if (isMandateBlockedError(error)) {
         const currentCost = await client.getCurrentCost();
         console.log(
           `  🚫 BLOCKED: ${error.reason} (Total spent: $${currentCost.toFixed(

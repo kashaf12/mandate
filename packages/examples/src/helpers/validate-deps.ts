@@ -3,6 +3,7 @@
  */
 
 import Redis from "ioredis";
+import { isError } from "./error-guards.js";
 
 /**
  * Check if Redis is accessible at the given host and port.
@@ -24,11 +25,12 @@ export async function checkRedis(
     await redis.ping();
     await redis.quit();
     return { available: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     await redis.quit().catch(() => {}); // Ignore quit errors
+    const message = isError(error) ? error.message : "Unknown error";
     return {
       available: false,
-      error: error.message || "Unknown error",
+      error: message,
     };
   }
 }
@@ -64,10 +66,11 @@ export async function checkOllama(
       available: false,
       error: `Ollama returned status ${response.status}`,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = isError(error) ? error.message : "Cannot connect to Ollama";
     return {
       available: false,
-      error: error.message || "Cannot connect to Ollama",
+      error: message,
     };
   }
 }

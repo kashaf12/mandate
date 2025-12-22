@@ -19,6 +19,7 @@ import {
   MandateTemplates,
   CommonSchemas,
 } from "@mandate/sdk";
+import { isMandateBlockedError, isError } from "./helpers/error-guards.js";
 
 // Simulated email API with transient failures
 let attemptCount = 0;
@@ -58,9 +59,10 @@ async function withoutMandate() {
       });
       console.log(`\n✅ Success after ${attemptCount} attempts\n`);
       break;
-    } catch (error: any) {
+    } catch (error: unknown) {
       retries++;
-      console.log(`[RETRY #${retries}] ${error.message}`);
+      const message = isError(error) ? error.message : String(error);
+      console.log(`[RETRY #${retries}] ${message}`);
 
       if (retries >= maxRetries) {
         console.log(`\n❌ Gave up after ${maxRetries} retries`);
@@ -125,10 +127,10 @@ async function withMandate() {
       console.log(`💰 Total cost: $${cost.total.toFixed(2)}`);
       console.log(`🛡️  Mandate prevented runaway retries\n`);
       break;
-    } catch (error: any) {
+    } catch (error: unknown) {
       retries++;
 
-      if (error.name === "MandateBlockedError") {
+      if (isMandateBlockedError(error)) {
         console.log(`\n🛑 BLOCKED: ${error.reason}`);
         const finalCost = await client.getCost();
         const callCount = await client.getCallCount();

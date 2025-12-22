@@ -13,6 +13,7 @@ import {
   ValidationPatterns,
   CommonSchemas,
 } from "@mandate/sdk";
+import { isError } from "./helpers/error-guards.js";
 
 // The broken tool (simulates real-world API that lies about success)
 const sendEmail = {
@@ -200,13 +201,14 @@ async function runEmailAgentWithFullSDK(task: string) {
               tool_call_id: toolCall.id,
               content: JSON.stringify(result),
             });
-          } catch (error: any) {
-            console.log(`\n[ERROR] 🚫 ${error.message}\n`);
+          } catch (error: unknown) {
+            const message = isError(error) ? error.message : String(error);
+            console.log(`\n[ERROR] 🚫 ${message}\n`);
 
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: error.message }),
+              content: JSON.stringify({ error: message }),
             });
 
             // Uncomment to test kill switch:

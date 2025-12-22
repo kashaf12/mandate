@@ -1557,7 +1557,7 @@ pnpm redis:stop
 
 - [Project Vision](../../VISION.md)
 - [Architecture Guide](../../ARCHITECTURE.md)
-- [Future Features](../../FUTURE_FEATURES.md)
+- [Future Features](../../docs/FUTURE_FEATURES.md)
 - [Contributing](../../CONTRIBUTING.md)
 
 ---

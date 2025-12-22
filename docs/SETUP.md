@@ -296,9 +296,10 @@ mandate/
 │   │   └── tests/        # Test files
 │   └── examples/         # Example applications
 ├── package.json          # Root package.json (monorepo)
-├── SETUP.md             # This file
+├── docs/
+│   ├── SETUP.md         # This file
+│   └── DEPLOYMENT.md    # Production deployment guide
 ├── README.md            # Project overview
-└── DEPLOYMENT.md        # Production deployment guide
 ```
 
 ---
@@ -324,10 +325,10 @@ export MANDATE_ID=shared-mandate-id
 
 ## Next Steps
 
-- **Read [README.md](./README.md)** - Project overview and quick start
-- **Read [DEPLOYMENT.md](./DEPLOYMENT.md)** - Production deployment guide
-- **Explore [packages/examples](./packages/examples)** - Working examples
-- **Read [packages/sdk/README.md](./packages/sdk/README.md)** - Full API documentation
+- **Read [README.md](../README.md)** - Project overview and quick start
+- **Read [docs/DEPLOYMENT.md](./DEPLOYMENT.md)** - Production deployment guide
+- **Explore [packages/examples](../packages/examples)** - Working examples
+- **Read [packages/sdk/README.md](../packages/sdk/README.md)** - Full API documentation
 
 ---
 
@@ -335,3 +336,4 @@ export MANDATE_ID=shared-mandate-id
 
 - **Issues:** [GitHub Issues](https://github.com/kashaf12/mandate/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/kashaf12/mandate/discussions)
+
