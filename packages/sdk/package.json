@@ -51,12 +51,18 @@
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
     "prepublishOnly": "pnpm build && pnpm test",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "redis:start": "docker compose up -d",
+    "redis:stop": "docker compose down",
+    "redis:logs": "docker compose logs -f redis",
+    "test:redis": "docker compose up -d && pnpm test tests/state/redis.test.ts && docker compose down"
   },
   "dependencies": {
+    "ioredis": "^5.3.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/ioredis": "^5.0.0",
     "@types/node": "^20.10.0",
     "@vitest/coverage-v8": "^1.0.0",
     "typescript": "^5.3.0",
