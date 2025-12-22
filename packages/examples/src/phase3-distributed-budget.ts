@@ -41,16 +41,15 @@ async function main() {
   console.log(`Shared Budget: $10.00`);
   console.log("=".repeat(60) + "\n");
 
-  // Create mandate with shared budget
+  // Create mandate with shared budget and explicit ID
+  // Using explicit ID ensures all processes share the same state
   const mandate = MandateTemplates.production("user@example.com", {
+    id: mandateId, // Explicit ID for distributed coordination
     agentId,
     maxCostTotal: 10.0,
     maxCostPerCall: 5.0,
     allowedTools: ["*"],
   });
-
-  // Override mandate ID to ensure all processes share the same state
-  mandate.id = mandateId;
 
   // Create client with Redis backend
   const client = new MandateClient({

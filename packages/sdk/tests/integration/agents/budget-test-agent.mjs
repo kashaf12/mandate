@@ -12,15 +12,12 @@ async function main() {
     const budget = parseFloat(process.env.MANDATE_BUDGET || "10.0");
 
     const mandate = MandateTemplates.production("test@example.com", {
+      id: mandateId, // Explicit ID for distributed coordination
       agentId,
       maxCostTotal: budget,
       maxCostPerCall: 10.0, // Allow test costs up to $10 per call
       allowedTools: ["test_tool", "*"], // Allow test_tool and all tools
     });
-
-    // CRITICAL: Override the generated mandateId with the provided one
-    // This ensures both processes use the same state key
-    mandate.id = mandateId;
 
     const client = new MandateClient({
       mandate,

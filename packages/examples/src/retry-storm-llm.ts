@@ -207,11 +207,12 @@ async function withMandate() {
 
   while (iteration < 50) {
     iteration++;
-    const callCount = client.getCallCount();
+    const callCount = await client.getCallCount();
+    const remaining = await client.getRemainingBudget();
     console.log(
-      `\n[Iteration ${iteration}] Budget: $${client
-        .getRemainingBudget()
-        ?.toFixed(2)}, Calls: ${callCount}`
+      `\n[Iteration ${iteration}] Budget: $${
+        remaining?.toFixed(2) || "∞"
+      }, Calls: ${callCount}`
     );
 
     // If we've hit the rate limit and agent hasn't tried in 3 iterations, force it
@@ -279,29 +280,23 @@ async function withMandate() {
             });
 
             console.log(`\n✅ Success! Mandate protected against retry storm`);
-            console.log(`💰 Total cost: $${client.getCost().total.toFixed(2)}`);
-            console.log(
-              `  - Cognition (LLM): $${client.getCost().cognition.toFixed(2)}`
-            );
-            console.log(
-              `  - Execution (Tools): $${client.getCost().execution.toFixed(2)}`
-            );
+            const cost = await client.getCost();
+            console.log(`💰 Total cost: $${cost.total.toFixed(2)}`);
+            console.log(`  - Cognition (LLM): $${cost.cognition.toFixed(2)}`);
+            console.log(`  - Execution (Tools): $${cost.execution.toFixed(2)}`);
             console.log(`📊 Total attempts: ${emailAttempts}`);
             console.log(`🛡️  Rate limit prevented infinite retries\n`);
             return;
           } catch (error: any) {
             if (error.name === "MandateBlockedError") {
               console.log(`\n🛑 MANDATE BLOCKED: ${error.reason}`);
+              const finalCost = await client.getCost();
+              console.log(`💰 Final cost: $${finalCost.total.toFixed(2)}`);
               console.log(
-                `💰 Final cost: $${client.getCost().total.toFixed(2)}`
+                `  - Cognition (LLM): $${finalCost.cognition.toFixed(2)}`
               );
               console.log(
-                `  - Cognition (LLM): $${client.getCost().cognition.toFixed(2)}`
-              );
-              console.log(
-                `  - Execution (Tools): $${client
-                  .getCost()
-                  .execution.toFixed(2)}`
+                `  - Execution (Tools): $${finalCost.execution.toFixed(2)}`
               );
               console.log(`📊 Attempts made: ${emailAttempts}`);
               console.log(`\n✅ Rate limit prevented retry storm\n`);

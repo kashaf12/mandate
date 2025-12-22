@@ -137,7 +137,7 @@ async function runEmailAgentWithFullSDK(task: string) {
     iteration++;
 
     // Check if agent was killed
-    if (killSwitch.isKilled(mandate.agentId, mandate.id)) {
+    if (await killSwitch.isKilled(mandate.agentId, mandate.id)) {
       console.log(`\n[AGENT] 🛑 Agent was killed. Stopping.\n`);
       break;
     }
@@ -221,7 +221,7 @@ async function runEmailAgentWithFullSDK(task: string) {
   }
 
   // Show final state (Layer 2)
-  const finalState = stateManager.get(mandate.agentId, mandate.id);
+  const finalState = await stateManager.get(mandate.agentId, mandate.id);
 
   console.log(`\n${"=".repeat(80)}`);
   console.log(`📊 FINAL STATE (StateManager - Layer 2)`);

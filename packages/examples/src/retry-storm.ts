@@ -121,7 +121,8 @@ async function withMandate() {
       );
 
       console.log(`\n✅ Success after ${attemptCount} attempts`);
-      console.log(`💰 Total cost: $${client.getCost().total.toFixed(2)}`);
+      const cost = await client.getCost();
+      console.log(`💰 Total cost: $${cost.total.toFixed(2)}`);
       console.log(`🛡️  Mandate prevented runaway retries\n`);
       break;
     } catch (error: any) {
@@ -129,8 +130,10 @@ async function withMandate() {
 
       if (error.name === "MandateBlockedError") {
         console.log(`\n🛑 BLOCKED: ${error.reason}`);
-        console.log(`💰 Total cost: $${client.getCost().total.toFixed(2)}`);
-        console.log(`📊 Attempts: ${client.getCallCount()}`);
+        const finalCost = await client.getCost();
+        const callCount = await client.getCallCount();
+        console.log(`💰 Total cost: $${finalCost.total.toFixed(2)}`);
+        console.log(`📊 Attempts: ${callCount}`);
         console.log(`\n✅ Rate limit prevented further damage\n`);
 
         // Show audit trail

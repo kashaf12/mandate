@@ -37,12 +37,11 @@ async function runAgent() {
   console.log("=".repeat(60) + "\n");
 
   const mandate = MandateTemplates.production("user@example.com", {
+    id: mandateId, // Explicit ID for distributed coordination
     agentId,
     maxCostTotal: 100.0,
     allowedTools: ["*"],
   });
-
-  mandate.id = mandateId;
 
   const client = new MandateClient({
     mandate,
@@ -108,12 +107,11 @@ async function runKiller() {
   // Create a mandate with the same ID as the agents
   // This allows us to kill agents that share the same mandate
   const mandate = MandateTemplates.production("admin@example.com", {
+    id: mandateId, // Explicit ID for distributed coordination
     agentId: targetAgentId, // Use target agent ID to kill the right agent
     maxCostTotal: 100.0,
     allowedTools: ["*"],
   });
-
-  mandate.id = mandateId;
 
   const client = new MandateClient({
     mandate,

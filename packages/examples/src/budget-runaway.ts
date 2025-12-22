@@ -98,9 +98,8 @@ async function withMandate() {
 
     try {
       console.log(`\n[Iteration ${iterations}] Attempting LLM call...`);
-      console.log(
-        `  Budget remaining: $${client.getRemainingBudget()?.toFixed(2)}`
-      );
+      const remaining = await client.getRemainingBudget();
+      console.log(`  Budget remaining: $${remaining?.toFixed(2) || "∞"}`);
 
       const result = await client.executeLLM(action, async () => {
         const response = await expensiveLLM.generate(`Iteration ${iterations}`);
@@ -108,11 +107,13 @@ async function withMandate() {
       });
       void result;
 
-      console.log(`  ✅ Success - Cost: $${client.getCost().total.toFixed(2)}`);
+      const cost = await client.getCost();
+      console.log(`  ✅ Success - Cost: $${cost.total.toFixed(2)}`);
     } catch (error: any) {
       if (error.name === "MandateBlockedError") {
+        const cost = await client.getCost();
         console.log(`\n🛑 BLOCKED: ${error.reason}`);
-        console.log(`💰 Final cost: $${client.getCost().total.toFixed(2)}`);
+        console.log(`💰 Final cost: $${cost.total.toFixed(2)}`);
         console.log(`📊 Iterations completed: ${iterations - 1}`);
         console.log(`\n✅ Budget enforcement prevented runaway costs\n`);
         break;

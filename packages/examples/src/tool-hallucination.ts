@@ -203,7 +203,8 @@ async function withMandate() {
   }
 
   console.log(`\n✅ Mandate enforced both LLM and tool calls\n`);
-  console.log(`💰 Total cost: $${client.getCost().total.toFixed(2)}`);
+  const cost = await client.getCost();
+  console.log(`💰 Total cost: $${cost.total.toFixed(2)}`);
 
   // Show audit trail
   const entries = client.getAuditEntries();

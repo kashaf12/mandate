@@ -156,8 +156,9 @@ async function main() {
   }
 
   console.log("📊 SUMMARY");
-  console.log(`Total calls: ${client.getCallCount()}`);
-  const cost = client.getCost();
+  const callCount = await client.getCallCount();
+  console.log(`Total calls: ${callCount}`);
+  const cost = await client.getCost();
   console.log(`Total cost: $${cost.total.toFixed(4)}`);
   console.log("\n✅ Phase 2 demonstration complete!");
 }

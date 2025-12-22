@@ -104,15 +104,14 @@ async function runSimpleEmailAgent(task: string) {
   while (iteration < maxIterations) {
     iteration++;
 
-    if (client.isKilled()) {
+    if (await client.isKilled()) {
       console.log(`\n[AGENT] 🛑 Agent was killed. Stopping.\n`);
       break;
     }
 
+    const remaining = await client.getRemainingBudget();
     console.log(
-      `[AGENT] 🧠 LLM call (budget: $${client
-        .getRemainingBudget()
-        ?.toFixed(2)})`
+      `[AGENT] 🧠 LLM call (budget: $${remaining?.toFixed(2) || "∞"})`
     );
 
     // ✨ ONE LINE - client handles everything
@@ -186,15 +185,18 @@ async function runSimpleEmailAgent(task: string) {
   console.log(`\n${"=".repeat(60)}`);
   console.log(`📊 FINAL STATE`);
   console.log(`${"=".repeat(60)}`);
-  const cost = client.getCost();
+  const cost = await client.getCost();
   console.log(
     `Cost: $${cost.total.toFixed(2)} (cognition: $${cost.cognition.toFixed(
       2
     )}, execution: $${cost.execution.toFixed(2)})`
   );
-  console.log(`Remaining budget: $${client.getRemainingBudget()?.toFixed(2)}`);
-  console.log(`Calls: ${client.getCallCount()}`);
-  console.log(`Killed: ${client.isKilled()}`);
+  const remaining = await client.getRemainingBudget();
+  console.log(`Remaining budget: $${remaining?.toFixed(2) || "∞"}`);
+  const callCount = await client.getCallCount();
+  console.log(`Calls: ${callCount}`);
+  const isKilled = await client.isKilled();
+  console.log(`Killed: ${isKilled}`);
   console.log(`${"=".repeat(60)}\n`);
 
   // ✨ SIMPLE AUDIT ACCESS

@@ -1456,9 +1456,9 @@ const mandate = MandateTemplates.production("user@example.com", {
 
 // ✅ Correct - both processes share same mandate ID
 const mandate = MandateTemplates.production("user@example.com", {
+  id: "shared-mandate-id", // Explicit ID for distributed coordination
   agentId: "my-agent",
 });
-mandate.id = "shared-mandate-id"; // Explicit ID
 ```
 
 **Kill switch not propagating:**

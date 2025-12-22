@@ -18,6 +18,7 @@ import {
  */
 
 export interface MandateOptions {
+  id?: string; // Mandate ID (auto-generated if not provided)
   agentId?: string; // Auto-generated if not provided
   principal: string; // Required
   description?: string;
@@ -52,9 +53,9 @@ export interface MandateOptions {
  */
 export function createMandate(options: MandateOptions): Mandate {
   const agentId = options.agentId || generateAgentId();
-  const mandateId = `mandate-${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 9)}`;
+  const mandateId =
+    options.id ||
+    `mandate-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   const now = Date.now();
 
   // Calculate expiration
