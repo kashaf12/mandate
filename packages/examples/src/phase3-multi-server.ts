@@ -28,7 +28,7 @@ async function simulateWork(): Promise<{ success: boolean }> {
 
 async function runAgent() {
   const agentId = `agent-${process.env.AGENT_ID || Date.now()}`;
-  const mandateId = process.env.MANDATE_ID || "shared-mandate-1";
+  const mandateId = process.env.MANDATE_ID || "shared-mandate";
 
   console.log("\n" + "=".repeat(60));
   console.log(`🤖 AGENT MODE - ${agentId}`);
