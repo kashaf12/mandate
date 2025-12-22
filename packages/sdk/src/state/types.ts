@@ -71,6 +71,22 @@ export interface StateManager {
    * Call this on shutdown.
    */
   close(): Promise<void>;
+
+  /**
+   * Register callback for kill events.
+   * Called when agent is killed (local or remote).
+   *
+   * @param agentId - Agent to watch
+   * @param callback - Called when killed
+   */
+  onKill?(agentId: string, callback: (reason: string) => void): void;
+
+  /**
+   * Unregister kill callback.
+   *
+   * @param agentId - Agent to stop watching
+   */
+  offKill?(agentId: string): void;
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { Action, Mandate, AuditEntry, BlockCode } from "./types";
 import { MandateBlockedError } from "./types";
 import type { PolicyEngine } from "./policy";
-import type { StateManager } from "./state";
+import type { StateManager as IStateManager } from "./state/types";
 import { evaluateChargingPolicy } from "./charging";
 import type { ChargingContext } from "./charging";
 import type { AuditLogger } from "./audit";
@@ -22,7 +22,7 @@ export async function executeWithMandate<T>(
   executor: () => Promise<T>,
   mandate: Mandate,
   policy: PolicyEngine,
-  stateManager: StateManager,
+  stateManager: IStateManager,
   auditLogger?: AuditLogger
 ): Promise<T> {
   const startTime = Date.now();

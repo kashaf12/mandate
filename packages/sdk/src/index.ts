@@ -67,7 +67,7 @@ export {
 // Classes
 export { MandateBlockedError } from "./types";
 export { PolicyEngine } from "./policy";
-export { StateManager, MemoryStateManager } from "./state";
+export { StateManager, MemoryStateManager, RedisStateManager } from "./state";
 export type { IStateManager, StateManagerConfig, RedisConfig } from "./state";
 
 // Core Primitive
@@ -102,3 +102,9 @@ export { KillSwitch } from "./killswitch";
 // High-level Client (recommended for most users)
 export { MandateClient } from "./client";
 export type { MandateClientConfig, AuditLoggerConfig } from "./client";
+
+// State Manager Factory
+export {
+  createStateManager,
+  createDistributedStateManager,
+} from "./state/factory";

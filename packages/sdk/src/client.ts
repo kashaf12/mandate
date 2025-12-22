@@ -1,5 +1,7 @@
 import { PolicyEngine } from "./policy";
-import { StateManager } from "./state";
+import type { StateManager as IStateManager } from "./state/types";
+import { createStateManager } from "./state/factory";
+import type { StateManagerConfig } from "./state/types";
 import { KillSwitch } from "./killswitch";
 import {
   ConsoleAuditLogger,
@@ -35,6 +37,8 @@ export type AuditLoggerConfig =
 export interface MandateClientConfig {
   mandate: Mandate;
   auditLogger?: AuditLoggerConfig;
+  // NEW: State manager config
+  stateManager?: StateManagerConfig;
 }
 
 /**
@@ -71,7 +75,7 @@ export interface MandateClientConfig {
  */
 export class MandateClient {
   private policyEngine: PolicyEngine;
-  private stateManager: StateManager;
+  private stateManager: IStateManager;
   private killSwitch: KillSwitch;
   private auditLogger: AuditLogger | undefined;
   private mandate: Mandate;
@@ -79,7 +83,10 @@ export class MandateClient {
   constructor(config: MandateClientConfig) {
     this.mandate = config.mandate;
     this.policyEngine = new PolicyEngine();
-    this.stateManager = new StateManager();
+
+    // Auto-select state manager
+    this.stateManager = createStateManager(config.stateManager);
+
     this.killSwitch = new KillSwitch(this.stateManager);
     this.auditLogger = this.createAuditLogger(config.auditLogger);
   }
@@ -202,20 +209,38 @@ export class MandateClient {
   }
 
   /**
-   * Kill this agent.
+   * Kill agent immediately.
+   *
+   * In distributed mode (Redis), broadcasts to all servers.
    */
   async kill(reason?: string): Promise<void> {
-    await this.killSwitch.kill(this.mandate.agentId, this.mandate.id, reason);
+    const state = await this.stateManager.get(
+      this.mandate.agentId,
+      this.mandate.id
+    );
+
+    await this.stateManager.kill(state, reason);
   }
 
   /**
    * Check if agent is killed.
    */
   async isKilled(): Promise<boolean> {
-    return await this.killSwitch.isKilled(
+    return await this.stateManager.isKilled(
       this.mandate.agentId,
       this.mandate.id
     );
+  }
+
+  /**
+   * Register kill callback.
+   *
+   * @param callback - Called when agent is killed (local or remote)
+   */
+  onKill(callback: (reason: string) => void): void {
+    if (this.stateManager.onKill) {
+      this.stateManager.onKill(this.mandate.agentId, callback);
+    }
   }
 
   /**
@@ -242,6 +267,17 @@ export class MandateClient {
       cognition: state.cognitionCost,
       execution: state.executionCost,
     };
+  }
+
+  /**
+   * Get current cost spent.
+   */
+  async getCurrentCost(): Promise<number> {
+    const state = await this.stateManager.get(
+      this.mandate.agentId,
+      this.mandate.id
+    );
+    return state.cumulativeCost;
   }
 
   /**
@@ -282,6 +318,14 @@ export class MandateClient {
    */
   getMandate(): Mandate {
     return this.mandate;
+  }
+
+  /**
+   * Close connections and cleanup resources.
+   * Call this on shutdown.
+   */
+  async close(): Promise<void> {
+    await this.stateManager.close();
   }
 
   /**

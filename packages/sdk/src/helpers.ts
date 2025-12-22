@@ -13,7 +13,7 @@ import type {
   TokenUsage,
 } from "./types";
 import type { PolicyEngine } from "./policy";
-import type { StateManager } from "./state";
+import type { StateManager as IStateManager } from "./state/types";
 import type { AuditLogger } from "./audit";
 
 /**
@@ -127,7 +127,7 @@ export async function executeLLM<T>(
   fn: () => Promise<T>,
   mandate: Mandate,
   policy: PolicyEngine,
-  stateManager: StateManager,
+  stateManager: IStateManager,
   auditLogger?: AuditLogger
 ): Promise<T> {
   const result = await executeWithMandate(
@@ -201,7 +201,7 @@ export async function executeTool<T>(
   fn: () => Promise<T>,
   mandate: Mandate,
   policy: PolicyEngine,
-  stateManager: StateManager,
+  stateManager: IStateManager,
   auditLogger?: AuditLogger
 ): Promise<T> {
   return executeWithMandate(

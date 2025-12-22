@@ -1,4 +1,4 @@
-import type { StateManager } from "./state";
+import type { StateManager as IStateManager } from "./state/types";
 
 /**
  * Kill switch for emergency agent termination.
@@ -6,7 +6,7 @@ import type { StateManager } from "./state";
  * Provides convenient methods for killing agents globally or individually.
  */
 export class KillSwitch {
-  constructor(private stateManager: StateManager) {}
+  constructor(private stateManager: IStateManager) {}
 
   /**
    * Kill a specific agent.

@@ -16,6 +16,7 @@ import type { Action, AgentState, RateLimit } from "../types";
  */
 export class MemoryStateManager implements StateManager {
   private states = new Map<string, AgentState>();
+  private killCallbacks = new Map<string, (reason: string) => void>();
 
   async get(agentId: string, mandateId: string): Promise<AgentState> {
     const key = `${agentId}:${mandateId}`;
@@ -113,6 +114,20 @@ export class MemoryStateManager implements StateManager {
     state.killed = true;
     state.killedAt = Date.now();
     state.killedReason = reason || "Kill switch activated";
+
+    // Trigger callback (local only)
+    const callback = this.killCallbacks.get(state.agentId);
+    if (callback) {
+      callback(state.killedReason);
+    }
+  }
+
+  onKill(agentId: string, callback: (reason: string) => void): void {
+    this.killCallbacks.set(agentId, callback);
+  }
+
+  offKill(agentId: string): void {
+    this.killCallbacks.delete(agentId);
   }
 
   async remove(agentId: string): Promise<void> {
