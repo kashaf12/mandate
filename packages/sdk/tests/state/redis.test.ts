@@ -61,6 +61,10 @@ describe("RedisStateManager", () => {
       const state1 = await manager.get("agent-1", "mandate-1");
       state1.cumulativeCost = 5.0;
 
+      // Save the state first so commitSuccess can read it
+      const key = `test:mandate:state:agent-1:mandate-1`;
+      await manager["saveState"](key, state1);
+
       const action: Action = {
         type: "tool_call",
         id: "action-1",

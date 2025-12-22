@@ -39,17 +39,18 @@ local stateKey = KEYS[1]
 local rateLimitKey = KEYS[2]
 local toolRateLimitKey = KEYS[3]
 
-local actionId = ARGV[1]
-local idempotencyKey = ARGV[2]
+-- Copy ARGV values to local variables (ARGV is readonly)
+local actionId = tostring(ARGV[1])
+local idempotencyKey = tostring(ARGV[2] or '')
 local estimatedCost = tonumber(ARGV[3]) or 0
-local costType = ARGV[4]
-local maxCostPerCall = tonumber(ARGV[5])
-local maxCostTotal = tonumber(ARGV[6])
-local agentMaxCalls = tonumber(ARGV[7])
-local agentWindowMs = tonumber(ARGV[8])
-local toolMaxCalls = tonumber(ARGV[9])
-local toolWindowMs = tonumber(ARGV[10])
-local timestamp = tonumber(ARGV[11])
+local costType = tostring(ARGV[4] or 'EXECUTION')
+local maxCostPerCall = ARGV[5] and tonumber(ARGV[5]) or nil
+local maxCostTotal = ARGV[6] and tonumber(ARGV[6]) or nil
+local agentMaxCalls = ARGV[7] and tonumber(ARGV[7]) or nil
+local agentWindowMs = ARGV[8] and tonumber(ARGV[8]) or nil
+local toolMaxCalls = ARGV[9] and tonumber(ARGV[9]) or nil
+local toolWindowMs = ARGV[10] and tonumber(ARGV[10]) or nil
+local timestamp = tonumber(ARGV[11]) or 0
 
 -- Helper: Create response
 local function createResponse(allowed, reason, code, remainingCost, remainingCalls)
@@ -77,6 +78,9 @@ if stateExists == 0 then
   )
 end
 
+-- Debug: Log script execution (remove in production)
+-- redis.log(redis.LOG_NOTICE, 'checkAndCommit: actionId=' .. actionId .. ', estimatedCost=' .. tostring(estimatedCost))
+
 -- 2. Check replay protection (action ID)
 local seenActionIds = redis.call('HGET', stateKey, 'seenActionIds')
 seenActionIds = cjson.decode(seenActionIds or '[]')
@@ -100,31 +104,61 @@ if idempotencyKey ~= '' then
 end
 
 -- 4. Check cost limits
+-- Use HINCRBYFLOAT to atomically get current value, then check
+-- We read first just for logging, but the real atomic operation is HINCRBYFLOAT
 local cumulativeCost = tonumber(redis.call('HGET', stateKey, 'cumulativeCost')) or 0
 
--- Per-call limit
-if maxCostPerCall and estimatedCost > maxCostPerCall then
-  return createResponse(
-    false,
-    'Estimated cost ' .. estimatedCost .. ' exceeds per-call limit ' .. maxCostPerCall,
-    'COST_LIMIT_EXCEEDED',
-    nil,
-    nil
-  )
-end
-
--- Cumulative limit
-if maxCostTotal then
-  local newCumulative = cumulativeCost + estimatedCost
-  if newCumulative > maxCostTotal then
+-- Per-call limit (check before increment)
+if maxCostPerCall then
+  local maxPerCall = tonumber(maxCostPerCall)
+  if estimatedCost > maxPerCall then
     return createResponse(
       false,
-      'Cumulative cost ' .. newCumulative .. ' would exceed limit ' .. maxCostTotal,
+      'Estimated cost ' .. estimatedCost .. ' exceeds per-call limit ' .. maxPerCall,
       'COST_LIMIT_EXCEEDED',
-      maxCostTotal - cumulativeCost,
+      nil,
       nil
     )
   end
+end
+
+-- Cumulative limit: Use HINCRBYFLOAT to atomically increment and get new value
+-- CRITICAL: HINCRBYFLOAT is atomic - it reads, increments, and returns in one operation
+-- This prevents the race condition where two scripts both read the same initial value
+if maxCostTotal then
+  local maxTotal = tonumber(maxCostTotal)
+  
+  -- CRITICAL: Use HINCRBYFLOAT to atomically increment and get the NEW value
+  -- HINCRBYFLOAT is atomic - it reads current value, increments, and returns new value in ONE operation
+  -- This prevents race conditions: if two scripts call HINCRBYFLOAT simultaneously:
+  --   Script 1: HINCRBYFLOAT(0, 5.5) → returns 5.5
+  --   Script 2: HINCRBYFLOAT(5.5, 5.5) → returns 11.0 (sees Script 1's increment!)
+  local newCumulative = tonumber(redis.call('HINCRBYFLOAT', stateKey, 'cumulativeCost', estimatedCost))
+  
+  -- Debug: log state key and HINCRBYFLOAT result to verify both use same key
+  redis.log(redis.LOG_WARNING, string.format('[LUA] stateKey=%s HINCRBYFLOAT returned: %.2f (was %.2f, added %.2f)', 
+    stateKey, newCumulative, cumulativeCost, estimatedCost))
+  
+  -- Now check if we exceeded the limit
+  if newCumulative > maxTotal then
+    -- Rollback the increment (atomic operation)
+    local rolledBack = tonumber(redis.call('HINCRBYFLOAT', stateKey, 'cumulativeCost', -estimatedCost))
+    redis.log(redis.LOG_WARNING, string.format('[LUA] BLOCKED: newCost=%.2f > maxTotal=%.2f (rolled back to %.2f)', newCumulative, maxTotal, rolledBack))
+    return createResponse(
+      false,
+      'Cumulative cost ' .. newCumulative .. ' would exceed limit ' .. maxTotal .. ' (current before increment: ' .. (newCumulative - estimatedCost) .. ')',
+      'COST_LIMIT_EXCEEDED',
+      math.max(0, maxTotal - (newCumulative - estimatedCost)),
+      nil
+    )
+  end
+  
+  -- Check passed - value already incremented
+  cumulativeCost = newCumulative
+  redis.log(redis.LOG_WARNING, string.format('[LUA] ALLOWED: incremented to %.2f', cumulativeCost))
+else
+  -- No total limit, but still need to increment for tracking
+  cumulativeCost = tonumber(redis.call('HINCRBYFLOAT', stateKey, 'cumulativeCost', estimatedCost))
 end
 
 -- 5. Check agent-level rate limit
@@ -173,11 +207,9 @@ if toolMaxCalls and toolWindowMs then
   end
 end
 
--- 7. All checks passed - UPDATE STATE ATOMICALLY
-
--- Update costs
-local newCumulativeCost = cumulativeCost + estimatedCost
-redis.call('HSET', stateKey, 'cumulativeCost', tostring(newCumulativeCost))
+-- 7. All checks passed - STATE ALREADY UPDATED ATOMICALLY
+-- Note: cumulativeCost was already incremented atomically above using HINCRBYFLOAT
+-- No need to update again here
 
 if costType == 'COGNITION' then
   local cognitionCost = tonumber(redis.call('HGET', stateKey, 'cognitionCost')) or 0
@@ -208,8 +240,10 @@ if toolMaxCalls and toolWindowMs then
   redis.call('ZADD', toolRateLimitKey, timestamp, actionId)
 end
 
--- Calculate remaining
-local remainingCost = maxCostTotal and (maxCostTotal - newCumulativeCost) or nil
+-- Calculate remaining (use the cumulativeCost from the if/else block above)
+-- Note: cumulativeCost is scoped within the if/else, so we need to get it from Redis
+local finalCumulativeCost = tonumber(redis.call('HGET', stateKey, 'cumulativeCost')) or 0
+local remainingCost = maxCostTotal and (tonumber(maxCostTotal) - finalCumulativeCost) or nil
 local remainingCalls = agentMaxCalls and (agentMaxCalls - callCount - 1) or nil
 
 return createResponse(true, 'All checks passed', nil, remainingCost, remainingCalls)

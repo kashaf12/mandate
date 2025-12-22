@@ -1,4 +1,4 @@
-import type { Action, Mandate, AuditEntry, BlockCode } from "./types";
+import type { Action, Mandate, AuditEntry, BlockCode, Decision } from "./types";
 import { MandateBlockedError } from "./types";
 import type { PolicyEngine } from "./policy";
 import type { StateManager as IStateManager } from "./state/types";
@@ -27,6 +27,149 @@ export async function executeWithMandate<T>(
 ): Promise<T> {
   const startTime = Date.now();
 
+  // Check if stateManager supports atomic check-and-commit (RedisStateManager)
+  const hasAtomicCheck = "checkAndCommit" in stateManager;
+
+  if (hasAtomicCheck) {
+    // ATOMIC PATH: Use Lua script for atomic check + commit
+    console.log(
+      `[Executor] Using ATOMIC path for action ${action.id}, cost ${action.estimatedCost}`
+    );
+    const atomicStateManager = stateManager as any;
+    const checkResult = await atomicStateManager.checkAndCommit(
+      action,
+      mandate
+    );
+
+    console.log(
+      `[Executor] Atomic check result: allowed=${checkResult.allowed}, reason=${checkResult.reason}`
+    );
+
+    if (!checkResult.allowed) {
+      // Log block decision
+      if (auditLogger) {
+        const auditEntry = createAuditEntry(
+          action,
+          mandate,
+          "BLOCK",
+          checkResult.reason,
+          checkResult.code,
+          action.estimatedCost,
+          undefined,
+          0, // cumulativeCost not available in atomic path
+          Date.now() - startTime
+        );
+        await Promise.resolve(auditLogger.log(auditEntry));
+      }
+
+      // Block before execution
+      // Create a decision object for the error
+      const decision: Extract<Decision, { type: "BLOCK" }> = {
+        type: "BLOCK",
+        reason: checkResult.reason,
+        code: (checkResult.code || "BLOCKED") as BlockCode,
+        hard: true, // Atomic checks are hard blocks
+      };
+      throw new MandateBlockedError(
+        checkResult.code || "BLOCKED",
+        checkResult.reason,
+        action.agentId,
+        action,
+        decision
+      );
+    }
+
+    // Budget already reserved atomically - proceed to execution
+    let result: T;
+    let actualCost: number | undefined;
+
+    // Phase 2: Execute (can fail)
+    try {
+      result = await executor();
+
+      // Extract actual cost if present in result
+      actualCost = (result as any)?.actualCost;
+    } catch (executionError) {
+      const error = executionError as Error;
+
+      // Log execution failure
+      if (auditLogger) {
+        const auditEntry = createAuditEntry(
+          action,
+          mandate,
+          "BLOCK",
+          `Execution failed: ${error.message}`,
+          undefined,
+          action.estimatedCost,
+          undefined,
+          0,
+          Date.now() - startTime
+        );
+        await Promise.resolve(auditLogger.log(auditEntry));
+      }
+
+      // Re-throw execution error
+      throw executionError;
+    }
+
+    // Phase 3: Verify (optional)
+    const toolPolicy =
+      action.type === "tool_call"
+        ? mandate.toolPolicies?.[action.tool]
+        : undefined;
+
+    if (toolPolicy?.verifyResult) {
+      const verification = toolPolicy.verifyResult({
+        action,
+        result,
+        mandate,
+      });
+
+      if (!verification.ok) {
+        // Log verification failure
+        if (auditLogger) {
+          const auditEntry = createAuditEntry(
+            action,
+            mandate,
+            "BLOCK",
+            `Verification failed: ${verification.reason}`,
+            undefined,
+            action.estimatedCost,
+            undefined,
+            0,
+            Date.now() - startTime
+          );
+          await Promise.resolve(auditLogger.log(auditEntry));
+        }
+
+        // Throw verification error
+        throw new Error(`Verification failed: ${verification.reason}`);
+      }
+    }
+
+    // Log success
+    if (auditLogger) {
+      const auditEntry = createAuditEntry(
+        action,
+        mandate,
+        "ALLOW",
+        checkResult.reason || "All checks passed",
+        undefined,
+        action.estimatedCost,
+        actualCost,
+        0, // cumulativeCost not available in atomic path
+        Date.now() - startTime
+      );
+      await Promise.resolve(auditLogger.log(auditEntry));
+    }
+
+    // Note: Budget already committed atomically in checkAndCommit
+    // If actualCost differs from estimatedCost, we'd need to adjust,
+    // but that breaks atomicity. For now, we use estimatedCost.
+    return result;
+  }
+
+  // NON-ATOMIC PATH: Original implementation for MemoryStateManager
   // Get current state
   const state = await stateManager.get(action.agentId, mandate.id);
 

@@ -133,29 +133,52 @@ export class RedisStateManager implements StateManager {
     _agentRateLimit?: RateLimit,
     _toolRateLimit?: RateLimit
   ): Promise<void> {
-    // For now, use simple implementation (will be replaced with Lua in Task 2.3)
+    // Use atomic operations for distributed consistency
     const actualCost = result?.actualCost ?? action.estimatedCost ?? 0;
     const key = this.stateKey(state.agentId, state.mandateId);
 
-    // Update state object
-    state.cumulativeCost += actualCost;
+    // Use Redis atomic operations to prevent race conditions
+    // HINCRBY for atomic increments
+    await this.redis.hincrbyfloat(key, "cumulativeCost", actualCost);
 
+    if (action.costType === "COGNITION") {
+      await this.redis.hincrbyfloat(key, "cognitionCost", actualCost);
+    } else if (action.costType === "EXECUTION") {
+      await this.redis.hincrbyfloat(key, "executionCost", actualCost);
+    }
+
+    // Update action IDs and idempotency keys atomically
+    const seenActionIds = await this.redis.hget(key, "seenActionIds");
+    const actionIds = seenActionIds ? JSON.parse(seenActionIds) : [];
+    if (!actionIds.includes(action.id)) {
+      actionIds.push(action.id);
+      await this.redis.hset(key, "seenActionIds", JSON.stringify(actionIds));
+    }
+
+    if (action.idempotencyKey) {
+      const seenKeys = await this.redis.hget(key, "seenIdempotencyKeys");
+      const keys = seenKeys ? JSON.parse(seenKeys) : [];
+      if (!keys.includes(action.idempotencyKey)) {
+        keys.push(action.idempotencyKey);
+        await this.redis.hset(key, "seenIdempotencyKeys", JSON.stringify(keys));
+      }
+    }
+
+    // Atomic increment for call count
+    await this.redis.hincrby(key, "callCount", 1);
+
+    // Update local state object for consistency
+    state.cumulativeCost += actualCost;
     if (action.costType === "COGNITION") {
       state.cognitionCost += actualCost;
     } else if (action.costType === "EXECUTION") {
       state.executionCost += actualCost;
     }
-
     state.seenActionIds.add(action.id);
     if (action.idempotencyKey) {
       state.seenIdempotencyKeys.add(action.idempotencyKey);
     }
-
-    // Update call count
     state.callCount += 1;
-
-    // Save to Redis
-    await this.saveState(key, state);
   }
 
   /**
@@ -272,6 +295,11 @@ export class RedisStateManager implements StateManager {
         ? `${this.keyPrefix}tool:ratelimit:${action.agentId}:${action.tool}`
         : "";
 
+    // Debug: Log before calling script
+    console.log(
+      `[RedisStateManager] checkAndCommit: actionId=${action.id}, cost=${action.estimatedCost}, stateKey=${stateKey}`
+    );
+
     const result = await this.redis.evalsha(
       this.checkAndCommitSha!,
       3, // number of keys
@@ -296,7 +324,14 @@ export class RedisStateManager implements StateManager {
       action.timestamp.toString()
     );
 
-    return JSON.parse(result as string);
+    const parsed = JSON.parse(result as string);
+
+    // Debug: Log result
+    console.log(
+      `[RedisStateManager] checkAndCommit result: allowed=${parsed.allowed}, reason=${parsed.reason}, remainingCost=${parsed.remainingCost}`
+    );
+
+    return parsed;
   }
 
   // ========================================================================

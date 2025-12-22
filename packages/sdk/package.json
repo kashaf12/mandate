@@ -45,7 +45,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/fix-imports.mjs && node scripts/copy-lua.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -55,7 +55,8 @@
     "redis:start": "docker compose up -d",
     "redis:stop": "docker compose down",
     "redis:logs": "docker compose logs -f redis",
-    "test:redis": "docker compose up -d && pnpm test tests/state/redis.test.ts && docker compose down"
+    "test:redis": "docker compose up -d && pnpm test tests/state/redis.test.ts && docker compose down",
+    "test:integration": "pnpm redis:start && vitest run tests/integration && pnpm redis:stop"
   },
   "dependencies": {
     "ioredis": "^5.3.2",
