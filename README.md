@@ -6,7 +6,7 @@ Mandate SDK is the first layer of [Know Your Agent (KYA)](./docs/VISION.md) infr
 
 <div align="center">
 
-[![Tests](https://img.shields.io/badge/tests-241%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-267%2B%20passing-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
@@ -97,6 +97,35 @@ try {
 3. ✅ **Settlement** - Cost reconciled (estimated vs actual)
 4. ✅ **Accounting** - Budget updated (commit-after-success)
 5. ✅ **Audit** - Decision logged with reason
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MandateClient                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │ PolicyEngine │  │ StateManager │  │ KillSwitch   │     │
+│  │  (Pure)      │  │  (Memory/    │  │  (Global)    │     │
+│  │              │  │   Redis)     │  │              │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          │ (Phase 3)
+                          ▼
+              ┌───────────────────────┐
+              │   Redis (Distributed) │
+              │  - State Coordination │
+              │  - Atomic Operations  │
+              │  - Pub/Sub Kill       │
+              └───────────────────────┘
+```
+
+**Phase 3 adds:**
+
+- Redis backend for distributed state
+- Atomic Lua scripts for race-free enforcement
+- Pub/Sub for instant kill propagation
+- Global per-agent limits across all servers
 
 ---
 
@@ -201,6 +230,48 @@ console.log("Cost:", client.getCost());
 console.log("Remaining:", client.getRemainingBudget());
 ```
 
+### Distributed Example (Phase 3)
+
+**Multiple processes sharing a budget:**
+
+```typescript
+import { MandateClient, MandateTemplates } from "@mandate/sdk";
+
+// Process 1, 2, 3 all use the same mandate ID
+const mandate = MandateTemplates.production("user@example.com", {
+  agentId: "my-agent",
+  maxCostTotal: 10.0,
+});
+mandate.id = "shared-mandate"; // Same ID for all processes
+
+const client = new MandateClient({
+  mandate,
+  stateManager: {
+    type: "redis",
+    redis: {
+      host: "localhost",
+      port: 6379,
+    },
+  },
+});
+
+// All processes compete for the same $10 budget
+await client.executeTool(action, executor);
+```
+
+**Run in multiple terminals:**
+
+```bash
+# Terminal 1
+PROCESS_ID=1 pnpm example:phase3-budget
+
+# Terminal 2
+PROCESS_ID=2 pnpm example:phase3-budget
+
+# Terminal 3
+PROCESS_ID=3 pnpm example:phase3-budget
+```
+
 **See [examples](./packages/examples) for real-world scenarios with LLM agents.**
 
 ---
@@ -283,13 +354,15 @@ interface Mandate {
 ┌─────────────────┐
 │  Commit State   │ ◄─── State only mutates after success
 │                 │      (retry-safe, no double-charging)
-└────────┬────────┘
+└────────┬────────┘      Phase 3: Atomic Lua script prevents races
          │
          ▼
 ┌─────────────────┐
 │  Audit Log      │ ◄─── Every decision logged
 └─────────────────┘      (structured, parseable)
 ```
+
+**Phase 3 (Distributed):** Budget checks and commits happen atomically via Redis Lua scripts, preventing race conditions across multiple servers.
 
 **Key phases:**
 
@@ -474,7 +547,7 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 | ----------- | --------------- | ------------------------------------ |
 | **Phase 1** | ✅ **Complete** | Runtime enforcement (local)          |
 | **Phase 2** | ✅ **Complete** | Agent identity & argument validation |
-| **Phase 3** | 🔄 In Progress  | Distributed coordination (Redis)     |
+| **Phase 3** | ✅ **Complete** | Distributed coordination (Redis)     |
 | **Phase 4** | Planned         | Delegation chains                    |
 | **Phase 5** | Planned         | Cryptographic verification           |
 
@@ -495,12 +568,16 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - ValidationPatterns (paths, emails, SQL)
 - **241 tests passing**
 
-### Phase 3: Distributed Authority 🔄
+### Phase 3: Distributed Coordination ✅
 
-- Redis-backed state
-- Global per-agent limits
-- Distributed kill switch
-- Coming Q1 2025
+**Status: Complete (December 2024)**
+
+- ✅ Redis-backed StateManager
+- ✅ Global per-agent limits (not per-server)
+- ✅ Atomic budget enforcement via Lua scripts
+- ✅ Distributed kill switch (Redis Pub/Sub)
+- ✅ Zero config for single process (auto-selects MemoryStateManager)
+- ✅ **267+ tests passing**
 
 ---
 
@@ -549,17 +626,50 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - `CommonSchemas` - Pre-built Zod schemas
 - `ValidationPatterns` - Built-in validation functions
 
-### Phase 3: Distributed Authority 🔄
+### Phase 3: Distributed Coordination ✅
 
-**Status: In Progress (Q1 2025)**
+**Status: Complete (December 2024)**
 
 **Goal:** Coordination across multiple processes/servers
 
-- [ ] Redis-backed StateManager
-- [ ] Global per-agent limits (not per-server)
-- [ ] Distributed kill switch
-- [ ] Mandate revocation propagation
-- [ ] Eventually-consistent enforcement
+- ✅ Redis-backed StateManager
+- ✅ Global per-agent limits (not per-server)
+- ✅ Atomic budget enforcement (Lua scripts)
+- ✅ Distributed kill switch (Redis Pub/Sub)
+- ✅ State persistence across restarts
+- ✅ **267+ tests passing**
+
+**What's New:**
+
+- `RedisStateManager` - Distributed state coordination
+- `createStateManager()` - Auto-selects Memory or Redis
+- Atomic `checkAndCommit()` - Prevents race conditions
+- Global kill switch - Instant propagation across servers
+- Zero config for single process - Backward compatible
+
+**Quick Start:**
+
+```typescript
+// Single process (auto-selects MemoryStateManager)
+const client = new MandateClient({
+  mandate: {
+    /* ... */
+  },
+});
+
+// Distributed (Redis)
+const client = new MandateClient({
+  mandate: {
+    /* ... */
+  },
+  stateManager: {
+    type: "redis",
+    redis: { host: "localhost", port: 6379 },
+  },
+});
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment guide.
 
 ### Phase 4: Delegation & Responsibility (Q3 2025)
 

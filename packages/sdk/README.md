@@ -1263,6 +1263,296 @@ Use Phase 3 distributed state for persistence.
 
 ---
 
+## Phase 3: Distributed Coordination ✅
+
+**Status: Complete**
+
+Phase 3 enables global per-agent enforcement across distributed infrastructure using Redis for state coordination.
+
+### Features
+
+- ✅ **Redis-backed StateManager** - Distributed state across multiple servers
+- ✅ **Atomic Operations** - Lua scripts prevent race conditions
+- ✅ **Global Budget Enforcement** - Per-agent limits, not per-server
+- ✅ **Distributed Kill Switch** - Instant propagation via Redis Pub/Sub
+- ✅ **Zero Config for Single Process** - Auto-selects MemoryStateManager
+
+### Quick Start
+
+**Single Process (Default):**
+
+```typescript
+import { MandateClient } from "@mandate/sdk";
+
+// No config needed - uses MemoryStateManager automatically
+const client = new MandateClient({
+  mandate: {
+    /* ... */
+  },
+});
+```
+
+**Distributed (Redis):**
+
+```typescript
+import { MandateClient } from "@mandate/sdk";
+
+const client = new MandateClient({
+  mandate: {
+    /* ... */
+  },
+  stateManager: {
+    type: "redis",
+    redis: {
+      host: "localhost",
+      port: 6379,
+      keyPrefix: "mandate:",
+    },
+  },
+});
+```
+
+**Using Environment Variable:**
+
+```typescript
+// Set REDIS_URL environment variable
+process.env.REDIS_URL = "redis://localhost:6379";
+
+// Auto-detects Redis and uses it
+const client = new MandateClient({
+  mandate: {
+    /* ... */
+  },
+  // stateManager config optional if REDIS_URL is set
+});
+```
+
+### Configuration
+
+**Basic Redis Config:**
+
+```typescript
+stateManager: {
+  type: "redis",
+  redis: {
+    host: "localhost",
+    port: 6379,
+    keyPrefix: "mandate:", // Optional, default: "mandate:"
+  },
+}
+```
+
+**Production Redis Config:**
+
+```typescript
+stateManager: {
+  type: "redis",
+  redis: {
+    host: "redis.example.com",
+    port: 6379,
+    password: process.env.REDIS_PASSWORD,
+    db: 0,
+    keyPrefix: "prod:mandate:",
+    connectTimeout: 5000,
+    commandTimeout: 1000,
+    maxRetries: 3,
+    keepAlive: true,
+  },
+}
+```
+
+**Redis Cluster:**
+
+```typescript
+stateManager: {
+  type: "redis",
+  redis: {
+    cluster: true,
+    clusterNodes: [
+      { host: "redis-1.example.com", port: 6379 },
+      { host: "redis-2.example.com", port: 6379 },
+      { host: "redis-3.example.com", port: 6379 },
+    ],
+    password: process.env.REDIS_PASSWORD,
+  },
+}
+```
+
+### Running Examples
+
+**Distributed Budget Example:**
+
+```bash
+# Terminal 1
+PROCESS_ID=1 pnpm example:phase3-budget
+
+# Terminal 2
+PROCESS_ID=2 pnpm example:phase3-budget
+
+# Terminal 3
+PROCESS_ID=3 pnpm example:phase3-budget
+```
+
+Watch 3 processes compete for a shared $10 budget - exactly one will be blocked when budget is exceeded!
+
+**Multi-Server Kill Switch:**
+
+```bash
+# Terminal 1 (Agent)
+ROLE=agent pnpm example:phase3-multiserver
+
+# Terminal 2 (Agent)
+ROLE=agent pnpm example:phase3-multiserver
+
+# Terminal 3 (Killer)
+ROLE=killer pnpm example:phase3-multiserver
+```
+
+Watch the killer stop all agents instantly via Redis Pub/Sub!
+
+### How It Works
+
+**Atomic Budget Enforcement:**
+
+1. Multiple processes call `executeTool()` simultaneously
+2. Each process calls `checkAndCommit()` Lua script on Redis
+3. Lua script atomically:
+   - Reads current budget
+   - Checks if action would exceed limit
+   - Increments budget if allowed
+   - Returns decision
+4. Only one process succeeds, others are blocked
+
+**Distributed Kill Switch:**
+
+1. Process A calls `client.kill(reason)`
+2. RedisStateManager publishes to `mandate:kill:broadcast` channel
+3. All connected processes receive kill signal via Pub/Sub
+4. Local callbacks fire, agents stop immediately
+
+### Troubleshooting
+
+**"Connection refused" error:**
+
+```bash
+# Start Redis locally
+docker compose -f packages/sdk/docker-compose.yml up -d
+
+# Or use cloud Redis
+REDIS_URL=redis://your-redis-host:6379
+```
+
+**Both processes succeed (should be one blocked):**
+
+- Check that both processes use the **same mandate ID**
+- Verify they're connecting to the **same Redis instance**
+- Ensure `mandate.id` is set explicitly (not auto-generated)
+
+```typescript
+// ❌ Wrong - each process gets different mandate ID
+const mandate = MandateTemplates.production("user@example.com", {
+  agentId: "my-agent",
+});
+
+// ✅ Correct - both processes share same mandate ID
+const mandate = MandateTemplates.production("user@example.com", {
+  agentId: "my-agent",
+});
+mandate.id = "shared-mandate-id"; // Explicit ID
+```
+
+**Kill switch not propagating:**
+
+- Verify Redis Pub/Sub is working: `redis-cli PUBSUB CHANNELS`
+- Check that all processes use the same `keyPrefix`
+- Ensure `onKill()` callback is registered before calling `kill()`
+
+**Performance issues:**
+
+- Use Redis connection pooling
+- Enable Redis persistence (AOF) for durability
+- Monitor Redis memory usage
+- Consider Redis Cluster for high availability
+
+### Migration Guide
+
+**From Phase 2 (Memory) to Phase 3 (Redis):**
+
+1. **Add Redis dependency:**
+
+   ```bash
+   pnpm add ioredis
+   ```
+
+2. **Update client config:**
+
+   ```typescript
+   // Before (Phase 2)
+   const client = new MandateClient({
+     mandate: {
+       /* ... */
+     },
+   });
+
+   // After (Phase 3)
+   const client = new MandateClient({
+     mandate: {
+       /* ... */
+     },
+     stateManager: {
+       type: "redis",
+       redis: { host: "localhost", port: 6379 },
+     },
+   });
+   ```
+
+3. **Make async calls:**
+
+   ```typescript
+   // Before (Phase 2)
+   const cost = client.getCost();
+   const killed = client.isKilled();
+
+   // After (Phase 3)
+   const cost = await client.getCurrentCost();
+   const killed = await client.isKilled();
+   ```
+
+4. **Register kill callbacks:**
+
+   ```typescript
+   // Phase 3: Register callback for distributed kill
+   await client.onKill((reason) => {
+     console.log(`Killed: ${reason}`);
+     // Cleanup and exit
+   });
+   ```
+
+5. **Close connections:**
+   ```typescript
+   // Phase 3: Clean up Redis connections
+   await client.close();
+   ```
+
+### Testing
+
+**Run integration tests:**
+
+```bash
+# Start Redis
+pnpm redis:start
+
+# Run distributed tests
+pnpm test:integration
+
+# Stop Redis
+pnpm redis:stop
+```
+
+**Test count: 267+ passing** (includes distributed coordination tests)
+
+---
+
 ## Learn More
 
 - [Project Vision](../../VISION.md)
