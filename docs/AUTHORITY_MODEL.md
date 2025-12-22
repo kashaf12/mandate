@@ -310,6 +310,35 @@ The `seenActionIds` set prevents duplicate execution of the same action ID. This
 
 Once an action is executed, its ID is added to the set. Subsequent attempts with the same ID are blocked with `DUPLICATE_ACTION`.
 
+**Action Identity Contract:**
+
+- **Use factory functions:** `createToolAction()` and `createLLMAction()` generate cryptographically strong IDs
+- **Retries:** MUST reuse the same `idempotencyKey` to get the same `actionId` (deterministic)
+- **New intent:** MUST use a new `idempotencyKey` (or omit it for new random ID)
+- **Manual construction:** Discouraged — bypasses replay protection guarantees
+
+---
+
+## Result Verification
+
+**IMPORTANT:** Verification functions are user-supplied logic.
+
+**What Mandate Enforces:**
+
+- Timeout (default 50ms, configurable via `verificationTimeoutMs`)
+- Error handling (all thrown errors are caught and converted to failures)
+- Audit visibility (duration, outcome: ok | failed | timeout | error)
+
+**What Mandate Does NOT Enforce:**
+
+- Purity (no side effects) — enforced by convention, not sandboxing
+- Determinism — enforced by convention, not runtime checks
+- Synchronous execution — enforced by convention, not type system
+
+**Best Practice:**
+
+> Verification functions should be pure, synchronous, and side-effect free. Mandate enforces visibility and boundedness, not purity.
+
 ---
 
 ## Mandate Lifecycle

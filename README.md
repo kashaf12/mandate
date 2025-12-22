@@ -524,6 +524,28 @@ With RedisStateManager:
 
 **See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for setup instructions.**
 
+### Distributed Enforcement Limitations
+
+**What Redis Provides:**
+
+- ✅ Atomic per-action budget enforcement (Lua scripts prevent race conditions)
+- ✅ Global per-agent limits across all servers
+- ✅ Distributed kill switch (Redis Pub/Sub for instant propagation)
+- ✅ State persistence across restarts
+
+**What Redis Does NOT Provide:**
+
+- ❌ Strong consistency across all operations (atomic per-action, not cross-action transactions)
+- ❌ Guaranteed availability (subject to Redis availability; fail-closed if Redis unavailable)
+- ❌ Instant kill switch propagation (Pub/Sub has network latency; eventually consistent)
+- ❌ Cross-action transactions (each action is atomic, but sequences are not transactional)
+
+**Operational Considerations:**
+
+- Redis downtime causes enforcement to fail-closed (actions are blocked)
+- Kill switch propagation depends on Pub/Sub delivery (typically < 100ms, but not guaranteed)
+- Budget enforcement is atomic per-action, but multi-action sequences are not transactional
+
 ### Kill Switch Scope
 
 **The kill switch is local to the MandateClient instance in Phase 1.**

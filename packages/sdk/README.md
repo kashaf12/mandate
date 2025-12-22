@@ -174,8 +174,11 @@ Every action evaluation produces a decision:
 ```typescript
 type Decision =
   | { type: "ALLOW"; reason: string; remainingCost?: number }
-  | { type: "BLOCK"; reason: string; code: BlockCode; hard: boolean };
+  | { type: "BLOCK"; reason: string; code: BlockCode; hard: boolean }
+  | { type: "DEFER"; reason: string; retryAfterMs?: number };
 ```
+
+**Note:** `DEFER` is reserved for future use and is **NOT produced by the current executor**. If encountered, the executor will throw an internal error. This preserves forward compatibility without pretending the feature exists.
 
 ### Enforcement Flow
 
@@ -859,6 +862,9 @@ const mandate: Mandate = {
   // ...
   toolPolicies: {
     send_email: {
+      // ⚠️ WARNING: Verification functions should be pure, synchronous, and side-effect free
+      // Mandate enforces visibility (timeouts, error handling, audit), not purity
+      verificationTimeoutMs: 100, // Optional: override default 50ms timeout
       verifyResult: (ctx) => {
         const result = ctx.result as EmailResult;
 
@@ -880,6 +886,20 @@ const mandate: Mandate = {
   },
 };
 ```
+
+**Verification Semantics:**
+
+- **Timeout:** Default 50ms, configurable via `verificationTimeoutMs`
+- **Error Handling:** All thrown errors are caught and converted to `{ ok: false, reason: "Verification threw error: ..." }`
+- **Audit:** Duration and outcome (ok | failed | timeout | error) are recorded
+- **Convention:** Functions should be pure, synchronous, and side-effect free (not enforced by runtime)
+
+**Verification Semantics:**
+
+- **Timeout:** Default 50ms, configurable via `verificationTimeoutMs`
+- **Error Handling:** All thrown errors are caught and converted to `{ ok: false, reason: "Verification threw error: ..." }`
+- **Audit:** Duration and outcome (ok | failed | timeout | error) are recorded
+- **Convention:** Functions should be pure, synchronous, and side-effect free (not enforced by runtime)
 
 ---
 
@@ -1090,6 +1110,25 @@ interface ToolPolicy {
   maxCostPerCall?: number;
   rateLimit?: RateLimit;
   chargingPolicy?: ChargingPolicy;
+  /**
+   * Result verification function.
+   *
+   * ⚠️ **IMPORTANT:** Verification functions are user-supplied logic.
+   *
+   * **What Mandate Enforces:**
+   * - Timeout (default 50ms, configurable via `verificationTimeoutMs`)
+   * - Error handling (all thrown errors are caught and converted to failures)
+   * - Audit visibility (duration, outcome: ok | failed | timeout | error)
+   *
+   * **What Mandate Does NOT Enforce:**
+   * - Purity (no side effects) - enforced by convention, not sandboxing
+   * - Determinism - enforced by convention, not runtime checks
+   * - Synchronous execution - enforced by convention, not type system
+   *
+   * **Best Practice:**
+   * Verification functions should be pure, synchronous, and side-effect free.
+   * Mandate enforces visibility and boundedness, not purity.
+   */
   verifyResult?: (ctx: VerificationContext) => VerificationDecision;
 }
 ```
@@ -1138,18 +1177,34 @@ type Decision =
       code: BlockCode;
       retryAfterMs?: number;
       hard: boolean;
+    }
+  | {
+      type: "DEFER";
+      reason: string;
+      retryAfterMs?: number;
     };
+```
+
+**Note:** `DEFER` is reserved for future use and is **NOT produced by the current executor**. If encountered, the executor will throw an internal error. This preserves forward compatibility without pretending the feature exists.
+| {
+type: "BLOCK";
+reason: string;
+code: BlockCode;
+retryAfterMs?: number;
+hard: boolean;
+};
 
 type BlockCode =
-  | "TOOL_NOT_ALLOWED"
-  | "TOOL_DENIED"
-  | "COST_LIMIT_EXCEEDED"
-  | "RATE_LIMIT_EXCEEDED"
-  | "MANDATE_EXPIRED"
-  | "AGENT_KILLED"
-  | "UNKNOWN_TOOL"
-  | "DUPLICATE_ACTION";
-```
+| "TOOL_NOT_ALLOWED"
+| "TOOL_DENIED"
+| "COST_LIMIT_EXCEEDED"
+| "RATE_LIMIT_EXCEEDED"
+| "MANDATE_EXPIRED"
+| "AGENT_KILLED"
+| "UNKNOWN_TOOL"
+| "DUPLICATE_ACTION";
+
+````
 
 ### ChargingPolicy
 
@@ -1167,7 +1222,7 @@ type ChargingPolicy =
       type: "CUSTOM";
       compute: (ctx: ChargingContext) => number;
     };
-```
+````
 
 ---
 

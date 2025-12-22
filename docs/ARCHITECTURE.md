@@ -34,11 +34,20 @@ Mandate SDK is a middleware layer that intercepts agent actions and enforces aut
 
 **CRITICAL INVARIANT:** LLM calls are non-side-effecting. All real-world effects must occur via ToolCall.
 
-- **LLM Calls**: Pure computation, no external state changes
-  - Authorized for: cost limits, rate limits
-  - NOT authorized for: permissions (no side effects to restrict)
-- **Tool Calls**: Real-world effects (file writes, API calls, state changes)
-  - Authorized for: permissions, cost limits, rate limits, argument validation, result verification
+**Mandate does not introspect or restrict model reasoning — only execution.**
+
+### LLM Calls
+
+- **Nature**: Pure computation, no external state changes
+- **Enforced**: Cost limits, rate limits, kill switch
+- **NOT enforced**: Tool permissions (no side effects to restrict), argument validation, result verification
+- **Rationale**: LLM calls are non-side-effecting; restricting them would be meaningless
+
+### Tool Calls
+
+- **Nature**: Real-world effects (file writes, API calls, state changes)
+- **Enforced**: Tool permissions (allowlist/denylist), cost limits, rate limits, argument validation, result verification, execution leases
+- **Rationale**: Tool calls have side effects and must be fully governed
 
 This boundary is enforced mechanically by the SDK. The PolicyEngine treats LLM and Tool calls differently based on this distinction.
 
@@ -110,17 +119,28 @@ Tracks mutable per-agent state.
 - Track kill switch status
 - Track replay protection (seen action IDs and idempotency keys)
 
-**Storage (Phase 1):**
+**Storage Modes:**
+
+**Local Enforcement (MemoryStateManager - Default):**
 
 - In-memory (single process)
 - Agent-level enforcement (local to this process)
 - No persistence
 - Resets on restart
 
-**Phase 3:**
+**Distributed Enforcement (RedisStateManager - Available Now):**
 
-- Redis/external store for distributed state
+- Redis-backed state coordination
 - Global per-agent limits (across all processes)
+- Atomic operations via Lua scripts
+- Distributed kill switch (Redis Pub/Sub)
+- State persistence across restarts
+
+**Limitations:**
+
+- Redis enforcement is atomic per-action, not cross-action transactions
+- Subject to Redis availability (fail-closed if Redis unavailable)
+- Kill switch propagation is eventually consistent (Pub/Sub latency)
 
 ### 4. Audit Logger
 

@@ -266,30 +266,38 @@ This document tracks features planned for future phases of Mandate SDK. These ar
 
 ---
 
-## Phase 3: Distributed State
+## Phase 3: Distributed State ✅ (Implemented)
 
 ### Global Per-Agent Limits
 
-**Current (Phase 1):**
+**Status: Available Now**
 
-- Limits enforced per SDK instance
-- Agent on 5 servers = 5x budget
+- ✅ Limits enforced globally per agent ID via Redis
+- ✅ Atomic budget enforcement via Lua scripts
+- ✅ Distributed kill switch (Redis Pub/Sub)
+- ✅ State persistence across restarts
 
-**Future (Phase 3):**
-
-- Limits enforced globally per agent ID
-- Requires distributed state (Redis, etc.)
+**Implementation:**
 
 ```typescript
 {
-  stateBackend: 'redis',
-  stateConfig: {
-    host: 'redis.example.com',
-    port: 6379,
-    keyPrefix: 'mandate:'
+  stateManager: {
+    type: 'redis',
+    redis: {
+      host: 'redis.example.com',
+      port: 6379,
+    }
   }
 }
 ```
+
+**Limitations:**
+
+- Subject to Redis availability (fail-closed if Redis unavailable)
+- Kill switch propagation is eventually consistent (Pub/Sub latency)
+- Atomic operations are per-action, not cross-action transactions
+
+**See [docs/DEPLOYMENT.md](./DEPLOYMENT.md) for setup instructions.**
 
 ---
 
@@ -417,4 +425,3 @@ Have an idea for a future feature?
 ## Next Steps
 
 See [ROADMAP.md](./ROADMAP.md) for detailed timelines and milestones.
-

@@ -86,12 +86,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Zero dependencies** - Core SDK has no runtime deps
 - **In-memory state** - Phase 1 limited to single process
 
-### Known Limitations (Phase 1)
+### Known Limitations
 
-- **Per-process enforcement** - Not global per-agent (Phase 3)
-- **Local kill switch** - Doesn't propagate across instances
-- **In-memory state** - No persistence across restarts
-- **No distributed coordination** - Budget can multiply across deployments
+**Local Enforcement (MemoryStateManager):**
+
+- Per-process enforcement (not global per-agent)
+- Local kill switch (doesn't propagate across instances)
+- In-memory state (no persistence across restarts)
+- No distributed coordination (budget can multiply across deployments)
+
+**Distributed Enforcement (RedisStateManager - Available Now):**
+
+- Atomic per-action (not cross-action transactions)
+- Subject to Redis availability (fail-closed if Redis unavailable)
+- Kill switch propagation is eventually consistent (Pub/Sub latency)
 
 ### Breaking Changes
 
