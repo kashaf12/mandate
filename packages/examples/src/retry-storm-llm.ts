@@ -127,7 +127,9 @@ async function withoutMandate() {
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: isError(error) ? error.message : String(error) }),
+              content: JSON.stringify({
+                error: isError(error) ? error.message : String(error),
+              }),
             });
           }
         }
@@ -326,7 +328,9 @@ async function withMandate() {
             messages.push({
               role: "tool",
               tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: isError(error) ? error.message : String(error) }),
+              content: JSON.stringify({
+                error: isError(error) ? error.message : String(error),
+              }),
             });
           }
         }
