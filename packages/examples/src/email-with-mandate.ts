@@ -49,7 +49,7 @@ const SEND_EMAIL_TOOL = {
 };
 
 // Real Mandate SDK configuration with all features (Phase 2: Using MandateTemplates)
-const mandate = MandateTemplates.production("kashaf@mandate.dev", {
+const mandate = MandateTemplates.production("kashafaahmed@gmail.com", {
   description: "Email automation agent with full SDK integration",
   allowedTools: ["send_email"],
   deniedTools: [],

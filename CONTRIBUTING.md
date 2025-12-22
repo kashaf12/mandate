@@ -439,7 +439,7 @@ By contributing to Mandate SDK, you agree that your contributions will be licens
 
 - **GitHub Issues**: [Report bugs or request features](https://github.com/kashaf12/mandate/issues)
 - **GitHub Discussions**: [Ask questions or discuss ideas](https://github.com/kashaf12/mandate/discussions)
-- **Email**: kashaf@mandate.dev (for sensitive matters)
+- **Email**: kashafaahmed@gmail.com (for sensitive matters)
 
 ---
 
