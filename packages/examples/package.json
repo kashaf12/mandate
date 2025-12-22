@@ -17,6 +17,8 @@
     "example:tool-hallucination": "tsx src/tool-hallucination.ts",
     "example:custom-pricing": "tsx src/custom-pricing.ts",
     "example:phase2": "tsx src/phase2-argument-validation.ts",
+    "example:phase3-budget": "tsx src/phase3-distributed-budget.ts",
+    "example:phase3-multiserver": "tsx src/phase3-multi-server.ts",
     "run:all-examples": "pnpm exec run-s --continue-on-error \"example:*\""
   },
   "dependencies": {
