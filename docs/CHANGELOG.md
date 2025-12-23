@@ -111,24 +111,24 @@ N/A - Initial release
 
 See [FUTURE_FEATURES.md](./FUTURE_FEATURES.md) for planned features.
 
-### Phase 2 (Q1 2025)
+### Phase 2 (Q4 2025)
 
 - Argument validation (block dangerous args)
 - Agent identity formalization
 - Mandate issuance API
 
-### Phase 3 (Q2 2025)
+### Phase 3 (Q4 2025)
 
 - Distributed state (Redis)
 - Global per-agent limits
 - Distributed kill switch
 
-### Phase 4 (Q3 2025)
+### Phase 4 (Q1 2026)
 
 - Delegation chains
 - Authority inheritance
 
-### Phase 5 (Q4 2025)
+### Phase 5 (Q1 2026)
 
 - Cryptographic signatures
 - Verifiable credentials

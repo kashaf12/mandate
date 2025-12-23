@@ -704,7 +704,7 @@ const client = new MandateClient({
 
 See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment guide.
 
-### Phase 4: Delegation & Responsibility (Q3 2025)
+### Phase 4: Delegation & Responsibility (Q1 2026)
 
 **Goal:** Agent-to-agent delegation with authority reduction
 
@@ -713,7 +713,7 @@ See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment guide.
 - [ ] Responsibility chains
 - [ ] Depth limits
 
-### Phase 5: Verifiable Authority (Q4 2025)
+### Phase 5: Verifiable Authority (Q2 2026)
 
 **Goal:** Cross-system trust
 
