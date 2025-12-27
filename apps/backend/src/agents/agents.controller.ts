@@ -23,6 +23,8 @@ import {
 import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
+import { KillAgentDto } from './dto/kill-agent.dto';
+import { KillStatusResponseDto } from './dto/kill-status-response.dto';
 import {
   AgentResponseDto,
   CreateAgentResponseDto,
@@ -228,5 +230,96 @@ export class AgentsController {
   })
   async remove(@Param('agentId') agentId: string): Promise<void> {
     await this.agentsService.remove(agentId);
+  }
+
+  @Post(':agentId/kill')
+  @ApiOperation({
+    summary: 'Kill agent (emergency termination)',
+    description:
+      'Immediately terminates agent. All subsequent mandate issuances will be blocked. Agent status set to inactive.',
+  })
+  @ApiParam({
+    name: 'agentId',
+    description: 'Agent identifier',
+    example: 'agent-abc123',
+  })
+  @ApiBody({
+    type: KillAgentDto,
+    description: 'Kill switch details',
+  })
+  @ApiOkResponse({
+    description: 'Agent killed successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Agent agent-abc123 killed successfully',
+        },
+      },
+    },
+  })
+  @ApiNotFoundResponse({
+    description: 'Agent not found',
+  })
+  async kill(
+    @Param('agentId') agentId: string,
+    @Body() dto: KillAgentDto,
+  ): Promise<{ message: string }> {
+    await this.agentsService.kill(agentId, dto);
+    return { message: `Agent ${agentId} killed successfully` };
+  }
+
+  @Get(':agentId/kill-status')
+  @ApiOperation({
+    summary: 'Check kill switch status',
+    description: 'Returns whether agent is killed and kill details.',
+  })
+  @ApiParam({
+    name: 'agentId',
+    description: 'Agent identifier',
+    example: 'agent-abc123',
+  })
+  @ApiOkResponse({
+    description: 'Kill status retrieved',
+    type: KillStatusResponseDto,
+  })
+  async getKillStatus(
+    @Param('agentId') agentId: string,
+  ): Promise<KillStatusResponseDto> {
+    return this.agentsService.getKillStatus(agentId);
+  }
+
+  @Post(':agentId/resurrect')
+  @ApiOperation({
+    summary: 'Resurrect killed agent',
+    description:
+      'Removes kill switch and sets agent status to active. Use with caution.',
+  })
+  @ApiParam({
+    name: 'agentId',
+    description: 'Agent identifier',
+    example: 'agent-abc123',
+  })
+  @ApiOkResponse({
+    description: 'Agent resurrected successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Agent agent-abc123 resurrected successfully',
+        },
+      },
+    },
+  })
+  @ApiNotFoundResponse({
+    description: 'Agent not found',
+  })
+  async resurrect(
+    @Param('agentId') agentId: string,
+  ): Promise<{ message: string }> {
+    await this.agentsService.resurrect(agentId);
+    return { message: `Agent ${agentId} resurrected successfully` };
   }
 }

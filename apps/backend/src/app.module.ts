@@ -11,6 +11,7 @@ import { HealthModule } from './health/health.module';
 import { PoliciesModule } from './policies/policies.module';
 import { RulesModule } from './rules/rules.module';
 import { MandatesModule } from './mandates/mandates.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { MandatesModule } from './mandates/mandates.module';
     PoliciesModule,
     RulesModule,
     MandatesModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

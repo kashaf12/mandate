@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { eq, and, gt } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
@@ -11,6 +12,7 @@ import { generateMandateId } from '../common/utils/crypto.utils';
 import { AgentsService } from '../agents/agents.service';
 import { RuleEvaluatorService } from '../rules/rule-evaluator.service';
 import { PolicyComposerService } from '../rules/policy-composer.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class MandatesService {
@@ -20,6 +22,7 @@ export class MandatesService {
     private agentsService: AgentsService,
     private ruleEvaluator: RuleEvaluatorService,
     private policyComposer: PolicyComposerService,
+    private auditService: AuditService,
   ) {}
 
   /**
@@ -38,23 +41,31 @@ export class MandatesService {
       );
     }
 
-    // 2. Evaluate rules → get matching policies
+    // 2. Check kill switch
+    const isKilled = await this.agentsService.isKilled(agentId);
+    if (isKilled) {
+      throw new BadRequestException(
+        'Agent is killed - mandate issuance blocked',
+      );
+    }
+
+    // 3. Evaluate rules → get matching policies
     const { policies, matchedRules } = await this.ruleEvaluator.evaluateContext(
       agentId,
       context,
     );
 
-    // 3. Compose policies → effective authority
+    // 4. Compose policies → effective authority
     const effectiveAuthority = this.policyComposer.compose(policies);
 
-    // 4. Generate mandate ID
+    // 5. Generate mandate ID
     const mandateId = generateMandateId();
 
-    // 5. Calculate expiration (5 minutes)
+    // 6. Calculate expiration (5 minutes)
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
 
-    // 6. Store mandate with minimal references
+    // 7. Store mandate with minimal references
     const [mandate] = await this.db
       .insert(schema.mandates)
       .values({
@@ -75,6 +86,17 @@ export class MandatesService {
         expiresAt,
       })
       .returning();
+
+    // 8. Log mandate issuance
+    await this.auditService.logMandateIssuance(
+      agentId,
+      mandateId,
+      context,
+      matchedRules.map((rule) => ({
+        rule_id: rule.ruleId,
+        rule_version: rule.version,
+      })),
+    );
 
     return mandate;
   }

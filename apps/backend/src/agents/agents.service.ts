@@ -2,19 +2,24 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
+import * as killSwitchSchema from '../database/schemas/kill-switches';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
+import { KillAgentDto } from './dto/kill-agent.dto';
+import { KillStatusResponseDto } from './dto/kill-status-response.dto';
 import {
   generateAgentId,
   generateApiKey,
   hashApiKey,
 } from '../common/utils/crypto.utils';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class AgentsService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private db: Database,
+    private auditService: AuditService,
   ) {}
 
   async create(createAgentDto: CreateAgentDto): Promise<{
@@ -127,5 +132,87 @@ export class AgentsService {
     if (result.length === 0) {
       throw new NotFoundException(`Agent ${agentId} not found`);
     }
+  }
+
+  /**
+   * Kill agent (emergency termination)
+   */
+  async kill(agentId: string, dto: KillAgentDto): Promise<void> {
+    // 1. Verify agent exists
+    await this.findOne(agentId);
+
+    // 2. Insert kill switch record
+    await this.db
+      .insert(killSwitchSchema.killSwitches)
+      .values({
+        agentId,
+        reason: dto.reason,
+        killedBy: dto.killedBy,
+      })
+      .onConflictDoUpdate({
+        target: killSwitchSchema.killSwitches.agentId,
+        set: {
+          killedAt: new Date(),
+          reason: dto.reason,
+          killedBy: dto.killedBy,
+        },
+      });
+
+    // 3. Set agent status to inactive
+    await this.update(agentId, { status: 'inactive' });
+
+    // 4. Log kill switch activation
+    await this.auditService.logKillSwitch(agentId, dto.reason, dto.killedBy);
+  }
+
+  /**
+   * Check if agent is killed
+   */
+  async isKilled(agentId: string): Promise<boolean> {
+    const [killSwitch] = await this.db
+      .select()
+      .from(killSwitchSchema.killSwitches)
+      .where(eq(killSwitchSchema.killSwitches.agentId, agentId))
+      .limit(1);
+
+    return !!killSwitch;
+  }
+
+  /**
+   * Get kill switch status
+   */
+  async getKillStatus(agentId: string): Promise<KillStatusResponseDto> {
+    const [killSwitch] = await this.db
+      .select()
+      .from(killSwitchSchema.killSwitches)
+      .where(eq(killSwitchSchema.killSwitches.agentId, agentId))
+      .limit(1);
+
+    if (!killSwitch) {
+      return { is_killed: false };
+    }
+
+    return {
+      is_killed: true,
+      killed_at: killSwitch.killedAt,
+      reason: killSwitch.reason,
+      killed_by: killSwitch.killedBy,
+    };
+  }
+
+  /**
+   * Resurrect agent (remove kill switch)
+   */
+  async resurrect(agentId: string): Promise<void> {
+    // 1. Verify agent exists
+    await this.findOne(agentId);
+
+    // 2. Remove kill switch
+    await this.db
+      .delete(killSwitchSchema.killSwitches)
+      .where(eq(killSwitchSchema.killSwitches.agentId, agentId));
+
+    // 3. Set agent status to active
+    await this.update(agentId, { status: 'active' });
   }
 }

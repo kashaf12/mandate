@@ -1,10 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { MandatesService } from './mandates.service';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import { AgentsService } from '../agents/agents.service';
 import { RuleEvaluatorService } from '../rules/rule-evaluator.service';
 import { PolicyComposerService } from '../rules/policy-composer.service';
+import { AuditService } from '../audit/audit.service';
 import * as schema from '../database/schema';
 
 // Mock crypto utils
@@ -18,6 +23,7 @@ describe('MandatesService', () => {
   let mockAgentsService: jest.Mocked<AgentsService>;
   let mockRuleEvaluator: jest.Mocked<RuleEvaluatorService>;
   let mockPolicyComposer: jest.Mocked<PolicyComposerService>;
+  let mockAuditService: jest.Mocked<AuditService>;
 
   const mockAgent: schema.Agent = {
     id: 'uuid-1',
@@ -65,6 +71,7 @@ describe('MandatesService', () => {
   beforeEach(async () => {
     mockAgentsService = {
       findOne: jest.fn(),
+      isKilled: jest.fn(),
     } as unknown as jest.Mocked<AgentsService>;
 
     mockRuleEvaluator = {
@@ -74,6 +81,10 @@ describe('MandatesService', () => {
     mockPolicyComposer = {
       compose: jest.fn(),
     } as unknown as jest.Mocked<PolicyComposerService>;
+
+    mockAuditService = {
+      logMandateIssuance: jest.fn(),
+    } as unknown as jest.Mocked<AuditService>;
 
     mockDb = {
       insert: jest.fn(),
@@ -98,6 +109,10 @@ describe('MandatesService', () => {
         {
           provide: PolicyComposerService,
           useValue: mockPolicyComposer,
+        },
+        {
+          provide: AuditService,
+          useValue: mockAuditService,
         },
       ],
     }).compile();
@@ -171,6 +186,18 @@ describe('MandatesService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    it('should throw BadRequestException if agent is killed', async () => {
+      mockAgentsService.findOne.mockResolvedValue(mockAgent);
+      mockAgentsService.isKilled.mockResolvedValue(true);
+
+      await expect(
+        service.issue('agent-abc123', { user_tier: 'free' }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.issue('agent-abc123', { user_tier: 'free' }),
+      ).rejects.toThrow('Agent is killed - mandate issuance blocked');
+    });
+
     it('should set expiration to 5 minutes from now', async () => {
       const context = { user_tier: 'free' };
       const effectiveAuthority = { maxCostTotal: 1.0 };
@@ -179,11 +206,13 @@ describe('MandatesService', () => {
       const expectedExpiresAt = new Date(now.getTime() + 5 * 60 * 1000);
 
       mockAgentsService.findOne.mockResolvedValue(mockAgent);
+      mockAgentsService.isKilled.mockResolvedValue(false);
       mockRuleEvaluator.evaluateContext.mockResolvedValue({
         policies: [mockPolicy],
         matchedRules: [mockRule],
       });
       mockPolicyComposer.compose.mockReturnValue(effectiveAuthority);
+      mockAuditService.logMandateIssuance.mockResolvedValue(undefined);
 
       const mockReturning = jest.fn().mockResolvedValue([
         {

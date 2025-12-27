@@ -4,6 +4,7 @@ import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
+import { KillAgentDto } from './dto/kill-agent.dto';
 import * as schema from '../database/schema';
 
 describe('AgentsController', () => {
@@ -14,6 +15,9 @@ describe('AgentsController', () => {
     findOne: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+    kill: jest.Mock;
+    getKillStatus: jest.Mock;
+    resurrect: jest.Mock;
   };
 
   const mockAgent: schema.Agent = {
@@ -36,6 +40,9 @@ describe('AgentsController', () => {
       findOne: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
+      kill: jest.fn(),
+      getKillStatus: jest.fn(),
+      resurrect: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -186,6 +193,59 @@ describe('AgentsController', () => {
       await expect(controller.remove('agent-abc123')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('kill', () => {
+    it('should kill agent', async () => {
+      const dto: KillAgentDto = {
+        reason: 'Runaway cost',
+        killedBy: 'admin@example.com',
+      };
+      mockAgentsService.kill.mockResolvedValue(undefined);
+
+      const result = await controller.kill('agent-123', dto);
+
+      expect(result.message).toContain('killed successfully');
+      expect(mockAgentsService.kill).toHaveBeenCalledWith('agent-123', dto);
+    });
+  });
+
+  describe('getKillStatus', () => {
+    it('should return kill status', async () => {
+      const status = {
+        is_killed: true,
+        killed_at: new Date(),
+        reason: 'Test',
+        killed_by: 'admin@example.com',
+      };
+      mockAgentsService.getKillStatus.mockResolvedValue(status);
+
+      const result = await controller.getKillStatus('agent-123');
+
+      expect(result.is_killed).toBe(true);
+      expect(result.reason).toBe('Test');
+      expect(mockAgentsService.getKillStatus).toHaveBeenCalledWith('agent-123');
+    });
+
+    it('should return not killed status', async () => {
+      const status = { is_killed: false };
+      mockAgentsService.getKillStatus.mockResolvedValue(status);
+
+      const result = await controller.getKillStatus('agent-123');
+
+      expect(result.is_killed).toBe(false);
+    });
+  });
+
+  describe('resurrect', () => {
+    it('should resurrect agent', async () => {
+      mockAgentsService.resurrect.mockResolvedValue(undefined);
+
+      const result = await controller.resurrect('agent-123');
+
+      expect(result.message).toContain('resurrected successfully');
+      expect(mockAgentsService.resurrect).toHaveBeenCalledWith('agent-123');
     });
   });
 });
