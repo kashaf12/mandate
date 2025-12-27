@@ -421,25 +421,21 @@ If the SDK itself fails (bug, misconfiguration):
 ### Components
 
 1. **Agent Service**
-
    - Registration, retrieval, updates
    - API key generation (SHA-256 hashed)
    - Principal tracking
 
 2. **Policy Service**
-
    - CRUD operations
    - Versioning (immutable)
    - Validation
 
 3. **Rule Engine**
-
    - Rule evaluation (context matching)
    - Policy composition (MIN, INTERSECTION, UNION)
    - Priority ordering
 
 4. **Mandate Service**
-
    - Dynamic issuance (POST /mandates/issue)
    - TTL management (5 minutes)
    - Caching strategy
@@ -560,13 +556,24 @@ CREATE TABLE kill_switches (
 
 - POST /rules
 - GET /rules
+- GET /rules/:id
 - PUT /rules/:id
 - DELETE /rules/:id
-- PUT /rules/reorder
 
 **Mandates:**
 
 - POST /mandates/issue
+- GET /mandates/:mandateId
+
+**Audit:**
+
+- POST /audit
+- POST /audit/bulk
+- GET /audit
+
+**Health:**
+
+- GET /health
   - Input: {agent_id, context}
   - Output: {mandate, ttl, matched_rules}
 

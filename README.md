@@ -461,6 +461,8 @@ interface Mandate {
 
 ## Architecture
 
+### SDK Architecture
+
 Mandate SDK is built in **8 layers**:
 
 1. **Types + Policy Engine** - Authorization logic (pure functions)
@@ -482,6 +484,38 @@ Mandate SDK is built in **8 layers**:
 - ✅ **Testable** - 241 passing tests
 
 See [ARCHITECTURE.md](./docs/ARCHITECTURE.md) for details.
+
+### Backend API Architecture (Phase 2)
+
+The Mandate Backend provides a RESTful API for managing agents, policies, rules, and mandates:
+
+**Components:**
+
+- **Agents API** - Agent registration with API key authentication
+- **Policies API** - Versioned policy management (immutable updates)
+- **Rules API** - Context-matching rules that map to policies
+- **Mandates API** - Dynamic mandate issuance (context → rules → policies → mandate)
+- **Audit API** - Enforcement decision logging and querying
+- **Health API** - Service and database health monitoring
+
+**Tech Stack:**
+
+- NestJS - TypeScript framework
+- PostgreSQL 16 - Database with Drizzle ORM
+- Winston - Structured logging
+- Swagger/OpenAPI - API documentation
+
+**Key Features:**
+
+- ✅ API key authentication (SHA-256 hashed)
+- ✅ Tenant isolation (agents can only access their own data)
+- ✅ Policy versioning with transaction-based updates
+- ✅ Rule evaluation engine with AND/OR logic
+- ✅ Policy composition (MIN budgets, INTERSECTION tools)
+- ✅ Request ID correlation for observability
+- ✅ Health checks with connection pool metrics
+
+See [apps/backend/README.md](./apps/backend/README.md) for complete backend documentation.
 
 ---
 
@@ -593,6 +627,8 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 
 ### Phase 2: Agent Identity & Policies ✅
 
+**SDK Components:**
+
 - Stable agent identities with persistent IDs
 - Agent registry (local, swappable backend)
 - Argument validation (Zod schemas + custom patterns)
@@ -600,6 +636,16 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - CommonSchemas for reusable validation
 - ValidationPatterns (paths, emails, SQL)
 - **241 tests passing**
+
+**Backend API (NestJS + PostgreSQL):**
+
+- Agent management API with API key authentication
+- Policy CRUD with immutable versioning
+- Rule management with context matching
+- Dynamic mandate issuance (context → rules → policies → mandate)
+- Audit logging API for enforcement decisions
+- Health checks with database pool metrics
+- **182 tests passing**
 
 ### Phase 3: Distributed Coordination ✅
 
@@ -641,6 +687,8 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 
 **Status: Complete (December 2024)**
 
+**SDK Features:**
+
 - ✅ Stable agent IDs (persistent across restarts)
 - ✅ Principal tracking (who owns the agent)
 - ✅ Mandate issuance API (factory & templates)
@@ -650,7 +698,21 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - ✅ ValidationPatterns (paths, emails, SQL)
 - **241 tests passing**
 
-**What's New:**
+**Backend API Features:**
+
+- ✅ RESTful API for agent, policy, rule, and mandate management
+- ✅ API key authentication with SHA-256 hashing
+- ✅ Policy versioning with transaction-based updates
+- ✅ Rule evaluation engine (context → policy matching)
+- ✅ Policy composition (MIN budgets, INTERSECTION tools)
+- ✅ Dynamic mandate issuance with 5-minute expiration
+- ✅ Audit logging with tenant isolation
+- ✅ Database indexes for query optimization
+- ✅ Request ID correlation for observability
+- ✅ Health checks with connection pool metrics
+- **182 tests passing**
+
+**What's New (SDK):**
 
 - `createMandate()` - Programmatic mandate creation
 - `MandateTemplates` - 4 templates (restricted, dev, prod, temporary)
@@ -658,6 +720,15 @@ Mandate enforces authority **deterministically**, but accounting and settlement 
 - `MemoryAgentRegistry` - Local agent tracking
 - `CommonSchemas` - Pre-built Zod schemas
 - `ValidationPatterns` - Built-in validation functions
+
+**What's New (Backend):**
+
+- RESTful API at `/agents`, `/policies`, `/rules`, `/mandates`, `/audit`
+- Swagger documentation at `/api`
+- PostgreSQL database with Drizzle ORM
+- API key authentication (`Bearer sk-*`)
+- Self-service agent lifecycle management (kill/resurrect)
+- Tenant isolation (agents can only access their own data)
 
 ### Phase 3: Distributed Coordination ✅
 
@@ -788,6 +859,8 @@ MIT License - see [LICENSE](./LICENSE) for details.
 - 📚 [Glossary of Terms](./docs/GLOSSARY.md)
 - 🚀 [Example Code](./packages/examples)
 - 📊 [Authority Model](./docs/AUTHORITY_MODEL.md)
+- 🔌 [Backend API Documentation](./apps/backend/README.md)
+- 📝 [API Request Examples](./apps/backend/REQUESTS.md)
 
 ---
 

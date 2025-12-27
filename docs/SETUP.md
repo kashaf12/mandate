@@ -55,6 +55,22 @@ docker exec -it $(docker ps -q -f name=redis) redis-cli ping
 # Should return: PONG
 ```
 
+**Start PostgreSQL (required for Phase 2 Backend API):**
+
+```bash
+# From project root
+cd apps/backend
+docker-compose -f docker-compose.dev.yml up -d
+
+# Verify PostgreSQL is running
+docker ps | grep postgres
+# Should show: mandate-backend-postgres or similar
+
+# Test connection (optional)
+docker exec -it $(docker ps -q -f name=postgres) psql -U postgres -d mandate -c "SELECT 1"
+# Should return: 1
+```
+
 ### 3. Build SDK
 
 ```bash
@@ -501,6 +517,77 @@ docker ps
 
 ---
 
+## Backend API Setup (Phase 2)
+
+### Quick Start
+
+```bash
+# Navigate to backend directory
+cd apps/backend
+
+# Install dependencies (if not already done from root)
+pnpm install
+
+# Start PostgreSQL
+docker-compose -f docker-compose.dev.yml up -d
+
+# Create .env file (copy from .env.example)
+cp .env.example .env
+# Edit .env and set required values
+
+# Run database migrations
+pnpm db:migrate
+
+# Start development server
+pnpm start:dev
+```
+
+**Backend will be available at:**
+- API: `http://localhost:3000`
+- Swagger Docs: `http://localhost:3000/api`
+
+### Backend Environment Variables
+
+Create `apps/backend/.env`:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mandate
+PORT=3000
+NODE_ENV=development
+JWT_SECRET=<generate-random-32-char-string>
+API_KEY_SALT=<generate-random-32-char-string>
+LOG_LEVEL=info
+```
+
+**Generate secrets:**
+
+```bash
+# Generate JWT_SECRET
+openssl rand -base64 32
+
+# Generate API_KEY_SALT
+openssl rand -base64 32
+```
+
+### Backend Testing
+
+```bash
+cd apps/backend
+
+# Run all tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Run tests with coverage
+pnpm test:cov
+```
+
+See [apps/backend/README.md](../apps/backend/README.md) for complete backend documentation.
+
+---
+
 ## Project Structure
 
 ```
@@ -511,6 +598,11 @@ mandate/
 │   │   ├── src/          # Source code
 │   │   └── tests/        # Test files
 │   └── examples/         # Example applications
+├── apps/
+│   └── backend/          # Phase 2 Backend API (NestJS + PostgreSQL)
+│       ├── src/          # Backend source code
+│       ├── docker-compose.yml  # PostgreSQL configuration
+│       └── README.md     # Backend documentation
 ├── package.json          # Root package.json (monorepo)
 ├── docs/
 │   ├── SETUP.md         # This file

@@ -49,6 +49,41 @@ curl -X PUT http://localhost:3000/agents/agent-abc123 \
 curl -X DELETE http://localhost:3000/agents/agent-abc123
 ```
 
+### Kill Agent
+
+**Note**: Requires API key authentication. Agents can only kill themselves.
+
+```bash
+curl -X POST http://localhost:3000/agents/agent-abc123/kill \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "reason": "Emergency termination - detected infinite loop",
+    "killedBy": "agent-abc123"
+  }'
+```
+
+**Response**: Returns success message
+
+### Get Kill Status
+
+```bash
+curl -X GET http://localhost:3000/agents/agent-abc123/kill-status
+```
+
+**Response**: Returns kill status with reason and timestamp if killed
+
+### Resurrect Agent
+
+**Note**: Requires API key authentication. Agents can only resurrect themselves.
+
+```bash
+curl -X POST http://localhost:3000/agents/agent-abc123/resurrect \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response**: Returns success message
+
 ## Policies API
 
 ### Create Policy
@@ -224,6 +259,89 @@ curl -X GET http://localhost:3000/mandates/mnd-abc123 \
 ```
 
 **Response**: Returns detailed mandate including matched rules and applied policies
+
+## Audit API
+
+**Note**: All audit endpoints require API key authentication. Agents can only access their own audit logs.
+
+### Create Audit Log Entry
+
+```bash
+curl -X POST http://localhost:3000/audit \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "actionId": "action-abc123",
+    "timestamp": "2024-12-27T15:30:00.000Z",
+    "actionType": "tool_call",
+    "decision": "ALLOW",
+    "toolName": "web_search",
+    "reason": "Within budget and rate limit",
+    "estimatedCost": 0.001,
+    "actualCost": 0.001,
+    "cumulativeCost": 0.5,
+    "metadata": {
+      "tool": "web_search",
+      "query": "example search"
+    }
+  }'
+```
+
+### Bulk Create Audit Logs
+
+```bash
+curl -X POST http://localhost:3000/audit/bulk \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "logs": [
+      {
+        "actionId": "action-001",
+        "timestamp": "2024-12-27T15:30:00.000Z",
+        "actionType": "tool_call",
+        "decision": "ALLOW",
+        "toolName": "web_search"
+      },
+      {
+        "actionId": "action-002",
+        "timestamp": "2024-12-27T15:30:05.000Z",
+        "actionType": "tool_call",
+        "decision": "BLOCK",
+        "toolName": "delete_file",
+        "reason": "Tool not in allowed list"
+      }
+    ]
+  }'
+```
+
+**Response**: Returns `{ "inserted": 2 }` - count of inserted logs
+
+### Query Audit Logs
+
+```bash
+# Query with filters
+curl -X GET "http://localhost:3000/audit?decision=ALLOW&actionType=tool_call&limit=10" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Query with time range
+curl -X GET "http://localhost:3000/audit?from=2024-12-27T00:00:00Z&to=2024-12-27T23:59:59Z&limit=100" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Query with pagination
+curl -X GET "http://localhost:3000/audit?limit=50&offset=100" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Query Parameters:**
+
+- `decision` - Filter by decision: `ALLOW` or `BLOCK`
+- `actionType` - Filter by action type (e.g., `tool_call`, `llm_call`)
+- `from` - Start timestamp (ISO 8601)
+- `to` - End timestamp (ISO 8601)
+- `limit` - Max results (default: 100, max: 1000)
+- `offset` - Pagination offset
+
+**Note**: `agentId` is automatically filtered by authenticated agent (cannot query other agents' logs)
 
 ## Health Check
 
