@@ -20,7 +20,7 @@ export const policies = pgTable(
     version: integer('version').notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
-    authority: jsonb('authority').$type<Record<string, any>>().notNull(),
+    authority: jsonb('authority').$type<Record<string, string>>().notNull(),
     active: boolean('active').default(true),
     createdAt: timestamp('created_at').defaultNow(),
     createdBy: varchar('created_by', { length: 255 }),

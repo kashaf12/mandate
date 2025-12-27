@@ -28,7 +28,7 @@ class RateLimitDto {
   windowMs: number;
 }
 
-class ToolPolicyDto {
+export class ToolPolicyDto {
   @ApiProperty({
     description: 'Whether this tool is allowed',
     example: true,

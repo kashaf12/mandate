@@ -37,7 +37,7 @@ export class PolicyResponseDto {
       deniedTools: ['delete_*', 'execute_*'],
     },
   })
-  authority: Record<string, any>;
+  authority: Record<string, string>;
 
   @ApiProperty({
     description: 'Whether this policy version is active',

@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
 import { CreatePolicyDto } from './dto/create-policy.dto';
@@ -27,7 +27,7 @@ export class PoliciesService {
         version,
         name: createPolicyDto.name,
         description: createPolicyDto.description,
-        authority: createPolicyDto.authority,
+        authority: createPolicyDto.authority as Record<string, string>,
         createdBy: createPolicyDto.createdBy,
       })
       .returning();
@@ -105,12 +105,42 @@ export class PoliciesService {
         version: newVersion,
         name: currentPolicy.name, // Name cannot be changed
         description: updatePolicyDto.description ?? currentPolicy.description,
-        authority: updatePolicyDto.authority ?? currentPolicy.authority,
+        authority: (updatePolicyDto.authority ??
+          currentPolicy.authority) as Record<string, string>,
         createdBy: currentPolicy.createdBy,
       })
       .returning();
 
     return policy;
+  }
+
+  async findByIds(policyIds: string[]): Promise<schema.Policy[]> {
+    if (policyIds.length === 0) {
+      return [];
+    }
+
+    // Fetch all active versions of requested policies (single query)
+    const allVersions = await this.db
+      .select()
+      .from(schema.policies)
+      .where(
+        and(
+          inArray(schema.policies.policyId, policyIds),
+          eq(schema.policies.active, true),
+        ),
+      )
+      .orderBy(desc(schema.policies.version));
+
+    // Group by policyId, keep only latest version
+    const latestPolicies = new Map<string, schema.Policy>();
+
+    for (const policy of allVersions) {
+      if (!latestPolicies.has(policy.policyId)) {
+        latestPolicies.set(policy.policyId, policy);
+      }
+    }
+
+    return Array.from(latestPolicies.values());
   }
 
   async remove(policyId: string, version?: number): Promise<void> {

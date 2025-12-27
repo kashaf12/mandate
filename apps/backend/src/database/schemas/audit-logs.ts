@@ -24,9 +24,9 @@ export const auditLogs = pgTable(
     estimatedCost: decimal('estimated_cost', { precision: 10, scale: 6 }),
     actualCost: decimal('actual_cost', { precision: 10, scale: 6 }),
     cumulativeCost: decimal('cumulative_cost', { precision: 10, scale: 6 }),
-    context: jsonb('context').$type<Record<string, any>>(),
+    context: jsonb('context').$type<Record<string, string>>(),
     matchedRules: jsonb('matched_rules').$type<Array<string>>(),
-    metadata: jsonb('metadata').$type<Record<string, any>>(),
+    metadata: jsonb('metadata').$type<Record<string, string>>(),
     createdAt: timestamp('created_at').defaultNow(),
   },
   (table) => [

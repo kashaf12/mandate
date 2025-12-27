@@ -9,6 +9,7 @@ import { validateEnv } from './config/env.validation';
 import { LoggerModule } from './common/logger/logger.module';
 import { HealthModule } from './health/health.module';
 import { PoliciesModule } from './policies/policies.module';
+import { RulesModule } from './rules/rules.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PoliciesModule } from './policies/policies.module';
     AgentsModule,
     HealthModule,
     PoliciesModule,
+    RulesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

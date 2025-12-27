@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
 import { CreateAgentDto } from './dto/create-agent.dto';
@@ -62,6 +62,17 @@ export class AgentsService {
     }
 
     return agent;
+  }
+
+  async findByIds(agentIds: string[]): Promise<schema.Agent[]> {
+    if (agentIds.length === 0) {
+      return [];
+    }
+
+    return await this.db
+      .select()
+      .from(schema.agents)
+      .where(inArray(schema.agents.agentId, agentIds));
   }
 
   async findByApiKey(apiKey: string): Promise<schema.Agent> {

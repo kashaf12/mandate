@@ -40,5 +40,5 @@ export class CreateAgentDto {
   })
   @IsOptional()
   @IsObject()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, string>;
 }

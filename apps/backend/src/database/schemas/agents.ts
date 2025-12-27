@@ -18,7 +18,7 @@ export const agents = pgTable(
     principal: varchar('principal', { length: 255 }),
     environment: varchar('environment', { length: 32 }).default('development'),
     status: varchar('status', { length: 32 }).default('active'),
-    metadata: jsonb('metadata').$type<Record<string, any>>().default({}),
+    metadata: jsonb('metadata').$type<Record<string, string>>().default({}),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },

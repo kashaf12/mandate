@@ -38,7 +38,7 @@ export class AgentResponseDto {
     description: 'Additional metadata as key-value pairs',
     example: { team: 'ai-platform', region: 'us-east-1' },
   })
-  metadata: Record<string, any>;
+  metadata: Record<string, string>;
 
   @ApiProperty({
     description: 'Timestamp when the agent was created',

@@ -3,7 +3,6 @@ import {
   uuid,
   varchar,
   text,
-  integer,
   jsonb,
   boolean,
   timestamp,
@@ -18,8 +17,19 @@ export const rules = pgTable(
     ruleId: varchar('rule_id', { length: 64 }).notNull().unique(),
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
-    priority: integer('priority').notNull(),
-    conditions: jsonb('conditions').$type<Array<any>>().notNull(),
+    // Agent scoping (optional, null = applies to all agents)
+    agentIds: jsonb('agent_ids').$type<string[] | null>(),
+    // Match mode (AND or OR)
+    matchMode: varchar('match_mode', { length: 8 }).default('AND'),
+    conditions: jsonb('conditions')
+      .$type<
+        Array<{
+          field: string;
+          operator: string;
+          value: string;
+        }>
+      >()
+      .notNull(),
     policyId: varchar('policy_id', { length: 64 }).notNull(),
     active: boolean('active').default(true),
     createdAt: timestamp('created_at').defaultNow(),
@@ -27,7 +37,7 @@ export const rules = pgTable(
   },
   (table) => [
     index('idx_rules_policy_id').on(table.policyId),
-    index('idx_rules_active_priority').on(table.active, table.priority),
+    index('idx_rules_active').on(table.active),
   ],
 );
 
