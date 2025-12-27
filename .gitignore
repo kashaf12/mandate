@@ -55,3 +55,6 @@ Thumbs.db
 .cursor
 docs-internal
 .pnpm-store
+
+# Database migrations
+**/drizzle/

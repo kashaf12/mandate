@@ -415,3 +415,230 @@ If the SDK itself fails (bug, misconfiguration):
 - Latency under load
 - Memory usage with many agents
 - Rate limiting accuracy
+
+## Backend Architecture (Phase 2)
+
+### Components
+
+1. **Agent Service**
+
+   - Registration, retrieval, updates
+   - API key generation (SHA-256 hashed)
+   - Principal tracking
+
+2. **Policy Service**
+
+   - CRUD operations
+   - Versioning (immutable)
+   - Validation
+
+3. **Rule Engine**
+
+   - Rule evaluation (context matching)
+   - Policy composition (MIN, INTERSECTION, UNION)
+   - Priority ordering
+
+4. **Mandate Service**
+
+   - Dynamic issuance (POST /mandates/issue)
+   - TTL management (5 minutes)
+   - Caching strategy
+
+5. **Audit Service**
+   - Bulk ingestion
+   - Query interface
+   - Storage strategy
+
+### Data Models
+
+**Agents Table:**
+
+```sql
+CREATE TABLE agents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id VARCHAR(64) UNIQUE NOT NULL,
+  api_key_hash VARCHAR(128) NOT NULL,
+  name VARCHAR(255),
+  principal VARCHAR(255),
+  environment VARCHAR(32),
+  status VARCHAR(32) DEFAULT 'active',
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Policies Table:**
+
+```sql
+CREATE TABLE policies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  policy_id VARCHAR(64) NOT NULL,
+  version INTEGER NOT NULL,
+  name VARCHAR(255),
+  description TEXT,
+  authority JSONB NOT NULL,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by VARCHAR(255),
+  UNIQUE(policy_id, version)
+);
+```
+
+**Rules Table:**
+
+```sql
+CREATE TABLE rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  priority INTEGER NOT NULL,
+  conditions JSONB NOT NULL,
+  policy_id VARCHAR(64) NOT NULL,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  FOREIGN KEY (policy_id) REFERENCES policies(policy_id)
+);
+```
+
+**Audit Logs Table:**
+
+```sql
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id VARCHAR(64) NOT NULL,
+  action_id VARCHAR(64) NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL,
+  action_type VARCHAR(32) NOT NULL,
+  tool_name VARCHAR(255),
+  decision VARCHAR(16) NOT NULL,
+  reason TEXT,
+  estimated_cost DECIMAL(10, 6),
+  actual_cost DECIMAL(10, 6),
+  cumulative_cost DECIMAL(10, 6),
+  context JSONB,
+  matched_rules JSONB,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_agent_time ON audit_logs(agent_id, timestamp DESC);
+CREATE INDEX idx_audit_decision ON audit_logs(decision);
+```
+
+**Kill Switches Table:**
+
+```sql
+CREATE TABLE kill_switches (
+  agent_id VARCHAR(64) PRIMARY KEY,
+  killed_at TIMESTAMPTZ DEFAULT NOW(),
+  reason TEXT,
+  killed_by VARCHAR(255)
+);
+```
+
+### API Endpoints
+
+**Agents:**
+
+- POST /agents
+- GET /agents/:id
+- PUT /agents/:id
+- DELETE /agents/:id
+- POST /agents/:id/kill
+- GET /agents/:id/kill-status
+
+**Policies:**
+
+- POST /policies
+- GET /policies
+- GET /policies/:id
+- PUT /policies/:id (new version)
+- DELETE /policies/:id
+
+**Rules:**
+
+- POST /rules
+- GET /rules
+- PUT /rules/:id
+- DELETE /rules/:id
+- PUT /rules/reorder
+
+**Mandates:**
+
+- POST /mandates/issue
+  - Input: {agent_id, context}
+  - Output: {mandate, ttl, matched_rules}
+
+**Audit:**
+
+- POST /audit (bulk)
+- GET /audit (query)
+
+### Rule Evaluation Algorithm
+
+```typescript
+function evaluateRules(context: any, rules: Rule[]): Policy[] {
+  // 1. Sort by priority
+  const sorted = rules.sort((a, b) => a.priority - b.priority);
+
+  // 2. Find matching rules
+  const matched = sorted.filter((rule) =>
+    matchesConditions(context, rule.conditions)
+  );
+
+  // 3. Get policies
+  const policies = matched.map((rule) => getPolicy(rule.policy_id));
+
+  return policies;
+}
+
+function matchesConditions(context: any, conditions: Condition[]): boolean {
+  return conditions.every((cond) => {
+    const value = context[cond.field];
+    switch (cond.operator) {
+      case "==":
+        return value === cond.value;
+      case "!=":
+        return value !== cond.value;
+      case "in":
+        return cond.value.includes(value);
+      case "contains":
+        return value?.includes(cond.value);
+      default:
+        return false;
+    }
+  });
+}
+```
+
+### Policy Composition
+
+```typescript
+function composePolicies(policies: Policy[]): Policy {
+  if (policies.length === 0) {
+    throw new Error("No policies matched");
+  }
+
+  if (policies.length === 1) {
+    return policies[0];
+  }
+
+  // Compose multiple policies
+  return {
+    // Budget: MIN
+    maxCostTotal: Math.min(...policies.map((p) => p.maxCostTotal || Infinity)),
+
+    // Rate: MIN
+    maxCallsPerTool: Math.min(
+      ...policies.map((p) => p.maxCallsPerTool || Infinity)
+    ),
+
+    // Tools: INTERSECTION
+    allowedTools: intersection(...policies.map((p) => p.allowedTools || [])),
+
+    // Denied: UNION
+    deniedTools: union(...policies.map((p) => p.deniedTools || [])),
+  };
+}
+```

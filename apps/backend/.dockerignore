@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.env
+*.log
+.DS_Store
+drizzle
+.git
+.gitignore
+README.md
+test
+*.spec.ts
+*.e2e-spec.ts
+

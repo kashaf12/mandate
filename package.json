@@ -14,17 +14,27 @@
   ],
   "scripts": {
     "build": "pnpm --filter @mandate/sdk build",
+    "build:backend": "pnpm --filter @mandate/backend build",
     "test": "pnpm docker:start && pnpm --filter @mandate/sdk test",
     "test:watch": "pnpm --filter @mandate/sdk test:watch",
     "test:coverage": "pnpm docker:start && pnpm --filter @mandate/sdk test:coverage",
     "test:integration": "pnpm docker:start && pnpm --filter @mandate/sdk test:integration",
+    "test:backend": "pnpm --filter @mandate/backend test",
     "type-check": "pnpm --filter @mandate/sdk type-check",
     "examples": "pnpm --filter @mandate/examples run:all-examples",
     "clean": "pnpm --filter @mandate/sdk clean",
     "docker:start": "cd packages/sdk && docker compose up -d",
     "docker:stop": "cd packages/sdk && docker compose down",
     "docker:logs": "cd packages/sdk && docker compose logs -f redis",
-    "docker:status": "docker ps --filter name=redis --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+    "docker:status": "docker ps --filter name=redis --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'",
+    "backend:start": "pnpm --filter @mandate/backend start",
+    "backend:dev": "pnpm --filter @mandate/backend start:dev",
+    "backend:db:generate": "pnpm --filter @mandate/backend db:generate",
+    "backend:db:migrate": "pnpm --filter @mandate/backend db:migrate",
+    "backend:db:studio": "pnpm --filter @mandate/backend db:studio",
+    "backend:docker:start": "cd apps/backend && docker compose up -d",
+    "backend:docker:stop": "cd apps/backend && docker compose down",
+    "backend:docker:dev": "cd apps/backend && docker compose -f docker-compose.dev.yml up -d"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
