@@ -1,4 +1,11 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
 import { eq, inArray } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
@@ -12,6 +19,7 @@ import {
   generateApiKey,
   hashApiKey,
 } from '../common/utils/crypto.utils';
+import { extractErrorInfo } from '../common/utils/error.utils';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -19,36 +27,52 @@ export class AgentsService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private db: Database,
+    @Inject(forwardRef(() => AuditService))
     private auditService: AuditService,
+    @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
   async create(createAgentDto: CreateAgentDto): Promise<{
     agent: schema.Agent;
     apiKey: string;
   }> {
-    // Generate unique agent_id
-    const agentId = generateAgentId();
+    try {
+      // Generate unique agent_id
+      const agentId = generateAgentId();
 
-    // Generate API key (returned once, never stored in plaintext)
-    const apiKey = generateApiKey();
+      // Generate API key (returned once, never stored in plaintext)
+      const apiKey = generateApiKey();
 
-    // Hash API key for storage (SHA-256)
-    const apiKeyHash = hashApiKey(apiKey);
+      // Hash API key for storage (SHA-256)
+      const apiKeyHash = hashApiKey(apiKey);
 
-    // Insert agent
-    const [agent] = await this.db
-      .insert(schema.agents)
-      .values({
-        agentId,
-        apiKeyHash,
-        name: createAgentDto.name,
-        principal: createAgentDto.principal,
-        environment: createAgentDto.environment || 'development',
-        metadata: createAgentDto.metadata || {},
-      })
-      .returning();
+      // Insert agent
+      const [agent] = await this.db
+        .insert(schema.agents)
+        .values({
+          agentId,
+          apiKeyHash,
+          name: createAgentDto.name,
+          principal: createAgentDto.principal,
+          environment: createAgentDto.environment || 'development',
+          metadata: createAgentDto.metadata || {},
+        })
+        .returning();
 
-    return { agent, apiKey };
+      return { agent, apiKey };
+    } catch (error) {
+      const { message, stack } = extractErrorInfo(error);
+      this.logger.error('Failed to create agent', {
+        error: message,
+        stack,
+        createAgentDto: {
+          name: createAgentDto.name,
+          principal: createAgentDto.principal,
+          environment: createAgentDto.environment,
+        },
+      });
+      throw error;
+    }
   }
 
   async findAll(): Promise<schema.Agent[]> {
@@ -138,10 +162,8 @@ export class AgentsService {
    * Kill agent (emergency termination)
    */
   async kill(agentId: string, dto: KillAgentDto): Promise<void> {
-    // 1. Verify agent exists
     await this.findOne(agentId);
 
-    // 2. Insert kill switch record
     await this.db
       .insert(killSwitchSchema.killSwitches)
       .values({
@@ -158,10 +180,8 @@ export class AgentsService {
         },
       });
 
-    // 3. Set agent status to inactive
     await this.update(agentId, { status: 'inactive' });
 
-    // 4. Log kill switch activation
     await this.auditService.logKillSwitch(agentId, dto.reason, dto.killedBy);
   }
 
@@ -204,15 +224,32 @@ export class AgentsService {
    * Resurrect agent (remove kill switch)
    */
   async resurrect(agentId: string): Promise<void> {
-    // 1. Verify agent exists
-    await this.findOne(agentId);
+    try {
+      await this.findOne(agentId);
 
-    // 2. Remove kill switch
-    await this.db
-      .delete(killSwitchSchema.killSwitches)
-      .where(eq(killSwitchSchema.killSwitches.agentId, agentId));
+      await this.db
+        .delete(killSwitchSchema.killSwitches)
+        .where(eq(killSwitchSchema.killSwitches.agentId, agentId));
 
-    // 3. Set agent status to active
-    await this.update(agentId, { status: 'active' });
+      await this.update(agentId, { status: 'active' });
+
+      await this.auditService.create({
+        agentId,
+        actionId: `resurrect-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actionType: 'agent_resurrected',
+        decision: 'ALLOW',
+        reason: 'Agent resurrected - kill switch removed',
+        metadata: {},
+      });
+    } catch (error) {
+      const { message, stack } = extractErrorInfo(error);
+      this.logger.error('Failed to resurrect agent', {
+        error: message,
+        stack,
+        agentId,
+      });
+      throw error;
+    }
   }
 }

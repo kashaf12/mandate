@@ -8,6 +8,9 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,6 +22,7 @@ import {
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiBadRequestResponse,
+  ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
@@ -29,6 +33,10 @@ import {
   AgentResponseDto,
   CreateAgentResponseDto,
 } from './dto/agent-response.dto';
+import { ApiKeyGuard } from '../common/guards/api-key.guard';
+import { Request } from 'express';
+import { Agent } from '../database/schema';
+import { ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('agents')
 @Controller('agents')
@@ -233,10 +241,12 @@ export class AgentsController {
   }
 
   @Post(':agentId/kill')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Kill agent (emergency termination)',
     description:
-      'Immediately terminates agent. All subsequent mandate issuances will be blocked. Agent status set to inactive.',
+      'Immediately terminates agent. All subsequent mandate issuances will be blocked. Agent status set to inactive. Only the agent itself can kill itself.',
   })
   @ApiParam({
     name: 'agentId',
@@ -262,10 +272,18 @@ export class AgentsController {
   @ApiNotFoundResponse({
     description: 'Agent not found',
   })
+  @ApiForbiddenResponse({
+    description: 'Forbidden - can only kill own agent',
+  })
   async kill(
     @Param('agentId') agentId: string,
     @Body() dto: KillAgentDto,
+    @Req() request: Request & { agent: Agent },
   ): Promise<{ message: string }> {
+    if (agentId !== request.agent.agentId) {
+      throw new ForbiddenException('Can only kill own agent');
+    }
+
     await this.agentsService.kill(agentId, dto);
     return { message: `Agent ${agentId} killed successfully` };
   }
@@ -291,10 +309,12 @@ export class AgentsController {
   }
 
   @Post(':agentId/resurrect')
+  @UseGuards(ApiKeyGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Resurrect killed agent',
     description:
-      'Removes kill switch and sets agent status to active. Use with caution.',
+      'Removes kill switch and sets agent status to active. Use with caution. Only the agent itself can resurrect itself.',
   })
   @ApiParam({
     name: 'agentId',
@@ -318,7 +338,12 @@ export class AgentsController {
   })
   async resurrect(
     @Param('agentId') agentId: string,
+    @Req() request: Request & { agent: Agent },
   ): Promise<{ message: string }> {
+    if (agentId !== request.agent.agentId) {
+      throw new ForbiddenException('Can only resurrect own agent');
+    }
+
     await this.agentsService.resurrect(agentId);
     return { message: `Agent ${agentId} resurrected successfully` };
   }

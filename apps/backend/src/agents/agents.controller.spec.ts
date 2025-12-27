@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
+import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { KillAgentDto } from './dto/kill-agent.dto';
 import * as schema from '../database/schema';
+import { Request } from 'express';
+import { Agent } from '../database/schema';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 describe('AgentsController', () => {
   let controller: AgentsController;
@@ -33,6 +37,11 @@ describe('AgentsController', () => {
     updatedAt: new Date(),
   };
 
+  const mockAgent123: schema.Agent = {
+    ...mockAgent,
+    agentId: 'agent-123',
+  };
+
   beforeEach(async () => {
     mockAgentsService = {
       create: jest.fn(),
@@ -45,6 +54,14 @@ describe('AgentsController', () => {
       resurrect: jest.fn(),
     };
 
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentsController],
       providers: [
@@ -52,8 +69,18 @@ describe('AgentsController', () => {
           provide: AgentsService,
           useValue: mockAgentsService,
         },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: mockLogger,
+        },
+        ApiKeyGuard,
       ],
-    }).compile();
+    })
+      .overrideGuard(ApiKeyGuard)
+      .useValue({
+        canActivate: jest.fn(() => true),
+      })
+      .compile();
 
     controller = module.get<AgentsController>(AgentsController);
   });
@@ -197,17 +224,38 @@ describe('AgentsController', () => {
   });
 
   describe('kill', () => {
-    it('should kill agent', async () => {
+    it('should kill agent when agent kills itself', async () => {
       const dto: KillAgentDto = {
         reason: 'Runaway cost',
         killedBy: 'admin@example.com',
       };
       mockAgentsService.kill.mockResolvedValue(undefined);
 
-      const result = await controller.kill('agent-123', dto);
+      const request = {
+        agent: mockAgent123,
+      } as Request & { agent: Agent };
+
+      const result = await controller.kill('agent-123', dto, request);
 
       expect(result.message).toContain('killed successfully');
       expect(mockAgentsService.kill).toHaveBeenCalledWith('agent-123', dto);
+    });
+
+    it('should throw ForbiddenException when trying to kill another agent', async () => {
+      const dto: KillAgentDto = {
+        reason: 'Malicious attempt',
+        killedBy: 'attacker@example.com',
+      };
+
+      const request = {
+        agent: mockAgent123,
+      } as Request & { agent: Agent };
+
+      await expect(controller.kill('agent-456', dto, request)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(mockAgentsService.kill).not.toHaveBeenCalled();
     });
   });
 
@@ -239,13 +287,29 @@ describe('AgentsController', () => {
   });
 
   describe('resurrect', () => {
-    it('should resurrect agent', async () => {
+    it('should resurrect agent when agent resurrects itself', async () => {
       mockAgentsService.resurrect.mockResolvedValue(undefined);
 
-      const result = await controller.resurrect('agent-123');
+      const request = {
+        agent: mockAgent123,
+      } as Request & { agent: Agent };
+
+      const result = await controller.resurrect('agent-123', request);
 
       expect(result.message).toContain('resurrected successfully');
       expect(mockAgentsService.resurrect).toHaveBeenCalledWith('agent-123');
+    });
+
+    it('should throw ForbiddenException when trying to resurrect another agent', async () => {
+      const request = {
+        agent: mockAgent123,
+      } as Request & { agent: Agent };
+
+      await expect(controller.resurrect('agent-456', request)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(mockAgentsService.resurrect).not.toHaveBeenCalled();
     });
   });
 });

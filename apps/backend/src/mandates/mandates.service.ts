@@ -5,10 +5,13 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
 import { eq, and, gt } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
 import { generateMandateId } from '../common/utils/crypto.utils';
+import { extractErrorInfo } from '../common/utils/error.utils';
 import { AgentsService } from '../agents/agents.service';
 import { RuleEvaluatorService } from '../rules/rule-evaluator.service';
 import { PolicyComposerService } from '../rules/policy-composer.service';
@@ -23,6 +26,7 @@ export class MandatesService {
     private ruleEvaluator: RuleEvaluatorService,
     private policyComposer: PolicyComposerService,
     private auditService: AuditService,
+    @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
   /**
@@ -33,72 +37,113 @@ export class MandatesService {
     agentId: string,
     context: Record<string, string>,
   ): Promise<schema.Mandate> {
-    // 1. Validate agent exists and is active
-    const agent = await this.agentsService.findOne(agentId);
-    if (agent.status !== 'active') {
-      throw new ForbiddenException(
-        `Agent ${agentId} is inactive. Cannot issue mandate.`,
-      );
-    }
+    try {
+      const sanitizedContext = this.sanitizeContext(context);
 
-    // 2. Check kill switch
-    const isKilled = await this.agentsService.isKilled(agentId);
-    if (isKilled) {
-      throw new BadRequestException(
-        'Agent is killed - mandate issuance blocked',
-      );
-    }
+      const agent = await this.agentsService.findOne(agentId);
+      if (agent.status !== 'active') {
+        throw new ForbiddenException(
+          `Agent ${agentId} is inactive. Cannot issue mandate.`,
+        );
+      }
 
-    // 3. Evaluate rules → get matching policies
-    const { policies, matchedRules } = await this.ruleEvaluator.evaluateContext(
-      agentId,
-      context,
-    );
+      const isKilled = await this.agentsService.isKilled(agentId);
+      if (isKilled) {
+        throw new BadRequestException(
+          'Agent is killed - mandate issuance blocked',
+        );
+      }
 
-    // 4. Compose policies → effective authority
-    const effectiveAuthority = this.policyComposer.compose(policies);
+      const { policies, matchedRules } =
+        await this.ruleEvaluator.evaluateContext(agentId, sanitizedContext);
 
-    // 5. Generate mandate ID
-    const mandateId = generateMandateId();
+      const effectiveAuthority = this.policyComposer.compose(policies);
 
-    // 6. Calculate expiration (5 minutes)
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+      const mandateId = generateMandateId();
 
-    // 7. Store mandate with minimal references
-    const [mandate] = await this.db
-      .insert(schema.mandates)
-      .values({
-        mandateId,
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+
+      const [mandate] = await this.db
+        .insert(schema.mandates)
+        .values({
+          mandateId,
+          agentId,
+          context: sanitizedContext,
+          authority: effectiveAuthority as Record<string, any>,
+          matchedRules: matchedRules.map((rule) => ({
+            ruleId: rule.ruleId,
+            ruleVersion: rule.version,
+          })),
+          appliedPolicies: policies.map((policy) => ({
+            policyId: policy.policyId,
+            policyVersion: policy.version,
+          })),
+          expiresAt,
+        })
+        .returning();
+
+      await this.auditService.logMandateIssuance(
         agentId,
-        context,
-        authority: effectiveAuthority as Record<string, any>,
-        // Store minimal references: ruleId + ruleVersion
-        matchedRules: matchedRules.map((rule) => ({
-          ruleId: rule.ruleId,
-          ruleVersion: rule.version,
+        mandateId,
+        sanitizedContext,
+        matchedRules.map((rule) => ({
+          rule_id: rule.ruleId,
+          rule_version: rule.version,
         })),
-        // Store policy references: policyId + policyVersion
-        appliedPolicies: policies.map((policy) => ({
-          policyId: policy.policyId,
-          policyVersion: policy.version,
-        })),
-        expiresAt,
-      })
-      .returning();
+      );
 
-    // 8. Log mandate issuance
-    await this.auditService.logMandateIssuance(
-      agentId,
-      mandateId,
-      context,
-      matchedRules.map((rule) => ({
-        rule_id: rule.ruleId,
-        rule_version: rule.version,
-      })),
-    );
+      return mandate;
+    } catch (error) {
+      const { message, stack } = extractErrorInfo(error);
+      this.logger.error('Failed to issue mandate', {
+        error: message,
+        stack,
+        agentId,
+        contextKeys: Object.keys(context),
+      });
+      throw error;
+    }
+  }
 
-    return mandate;
+  private sanitizeContext(
+    context: Record<string, string>,
+  ): Record<string, string> {
+    const sanitized: Record<string, string> = {};
+
+    if (!context || typeof context !== 'object') {
+      throw new BadRequestException('Context must be an object');
+    }
+
+    for (const [key, value] of Object.entries(context)) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(key)) {
+        throw new BadRequestException(
+          `Invalid context key: ${key}. Keys must be alphanumeric with underscores or hyphens.`,
+        );
+      }
+
+      if (typeof value !== 'string') {
+        throw new BadRequestException(
+          `Context value for key ${key} must be a string`,
+        );
+      }
+
+      if (value.length > 1000) {
+        throw new BadRequestException(
+          `Context value for key ${key} exceeds maximum length of 1000 characters`,
+        );
+      }
+
+      if (/[<>'";\\]/.test(value)) {
+        throw new BadRequestException(
+          `Context value for key ${key} contains invalid characters`,
+        );
+      }
+
+      sanitized[key] = value;
+    }
+
+    return sanitized;
   }
 
   /**
@@ -116,7 +161,6 @@ export class MandatesService {
       throw new NotFoundException(`Mandate ${mandateId} not found`);
     }
 
-    // Check if expired
     if (new Date() > mandate.expiresAt) {
       throw new NotFoundException(
         `Mandate ${mandateId} expired at ${mandate.expiresAt.toISOString()}`,
@@ -136,7 +180,6 @@ export class MandatesService {
   ): Promise<schema.Mandate | null> {
     const now = new Date();
 
-    // Find mandates for this agent that haven't expired
     const mandates = await this.db
       .select()
       .from(schema.mandates)
@@ -147,7 +190,6 @@ export class MandatesService {
         ),
       );
 
-    // Check if any mandate has matching context (JSON equality)
     for (const mandate of mandates) {
       const mandateContext = mandate.context;
       if (this.contextsMatch(mandateContext, context)) {

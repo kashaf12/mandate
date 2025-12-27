@@ -4,6 +4,7 @@ import { ExecutionContext } from '@nestjs/common';
 import { ApiKeyGuard } from './api-key.guard';
 import { AgentsService } from '../../agents/agents.service';
 import * as schema from '../../database/schema';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 describe('ApiKeyGuard', () => {
   let guard: ApiKeyGuard;
@@ -26,12 +27,24 @@ describe('ApiKeyGuard', () => {
   } as unknown as jest.Mocked<Pick<AgentsService, 'findByApiKey'>>;
 
   beforeEach(async () => {
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ApiKeyGuard,
         {
           provide: AgentsService,
           useValue: mockAgentsService,
+        },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: mockLogger,
         },
       ],
     }).compile();

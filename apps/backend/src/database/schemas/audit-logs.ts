@@ -36,6 +36,15 @@ export const auditLogs = pgTable(
     index('idx_audit_agent_id').on(table.agentId),
     index('idx_audit_timestamp').on(table.timestamp),
     index('idx_audit_decision').on(table.decision),
+    index('idx_audit_action_type').on(table.actionType),
+
+    index('idx_audit_agent_decision_time').on(
+      table.agentId,
+      table.decision,
+      table.timestamp,
+    ),
+
+    index('idx_audit_action_type_time').on(table.actionType, table.timestamp),
   ],
 );
 

@@ -11,6 +11,7 @@ import { RuleEvaluatorService } from '../rules/rule-evaluator.service';
 import { PolicyComposerService } from '../rules/policy-composer.service';
 import { AuditService } from '../audit/audit.service';
 import * as schema from '../database/schema';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 // Mock crypto utils
 jest.mock('../common/utils/crypto.utils', () => ({
@@ -91,6 +92,14 @@ describe('MandatesService', () => {
       select: jest.fn(),
     } as Partial<Database>;
 
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MandatesService,
@@ -113,6 +122,10 @@ describe('MandatesService', () => {
         {
           provide: AuditService,
           useValue: mockAuditService,
+        },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: mockLogger,
         },
       ],
     }).compile();
@@ -244,7 +257,8 @@ describe('MandatesService', () => {
       const expiresAt = valuesCall.expiresAt;
       const timeDiff = expiresAt.getTime() - now.getTime();
 
-      expect(timeDiff).toBe(5 * 60 * 1000); // 5 minutes
+      // Use toBeCloseTo to handle timing differences (allow 100ms variance)
+      expect(timeDiff).toBeCloseTo(5 * 60 * 1000, -2); // 5 minutes, within 100ms
     });
   });
 

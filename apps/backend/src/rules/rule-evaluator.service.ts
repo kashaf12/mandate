@@ -129,6 +129,20 @@ export class RuleEvaluatorService {
     }
   }
 
+  private validateOperator(operator: string): boolean {
+    const allowedOperators = [
+      '==',
+      '!=',
+      'in',
+      'contains',
+      '>',
+      '<',
+      '>=',
+      '<=',
+    ];
+    return allowedOperators.includes(operator);
+  }
+
   /**
    * Evaluate a single condition against context.
    */
@@ -136,9 +150,15 @@ export class RuleEvaluatorService {
     condition: Condition,
     context: Record<string, string>,
   ): boolean {
+    // ✅ Validate operator before use
+    if (!this.validateOperator(condition.operator)) {
+      throw new Error(
+        `Invalid operator: ${condition.operator}. Allowed operators: ==, !=, in, contains, >, <, >=, <=`,
+      );
+    }
+
     const contextValue = context[condition.field];
 
-    // Fail-closed: missing field = false
     if (contextValue === undefined) {
       return false;
     }
@@ -172,7 +192,6 @@ export class RuleEvaluatorService {
         return Number(contextValue) <= Number(condition.value);
 
       default:
-        // Fail-closed: unknown operator = false
         return false;
     }
   }

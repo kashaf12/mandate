@@ -9,6 +9,17 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export enum ComparisonOperator {
+  EQUALS = '==',
+  NOT_EQUALS = '!=',
+  IN = 'in',
+  CONTAINS = 'contains',
+  GREATER_THAN = '>',
+  LESS_THAN = '<',
+  GREATER_THAN_OR_EQUAL = '>=',
+  LESS_THAN_OR_EQUAL = '<=',
+}
+
 class ConditionDto {
   @ApiProperty({
     description: 'Context field to check (e.g., "user_tier", "environment")',
@@ -19,11 +30,11 @@ class ConditionDto {
 
   @ApiProperty({
     description: 'Comparison operator: ==, !=, in, contains, >, <, >=, <=',
-    example: '==',
-    enum: ['==', '!=', 'in', 'contains', '>', '<', '>=', '<='],
+    example: ComparisonOperator.EQUALS,
+    enum: ComparisonOperator,
   })
-  @IsString()
-  operator: string;
+  @IsEnum(ComparisonOperator)
+  operator: ComparisonOperator;
 
   @ApiProperty({
     description: 'Expected value (can be string, number, or array)',

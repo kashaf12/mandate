@@ -6,6 +6,9 @@ import { AgentsService } from '../agents/agents.service';
 import { ApiKeyGuard } from '../common/guards/api-key.guard';
 import { IssueMandateDto } from './dto/issue-mandate.dto';
 import * as schema from '../database/schema';
+import { Request } from 'express';
+import { Agent } from '../database/schema';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 describe('MandatesController', () => {
   let controller: MandatesController;
@@ -17,9 +20,24 @@ describe('MandatesController', () => {
     findByApiKey: jest.Mock;
   };
 
-  const mockAgent = {
+  const mockAgent: Agent = {
+    id: 'uuid-agent-abc123',
     agentId: 'agent-abc123',
+    apiKeyHash: 'hashed-key',
+    name: 'Test Agent',
+    principal: 'test@example.com',
+    environment: 'production',
     status: 'active',
+    metadata: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockOtherAgent: Agent = {
+    ...mockAgent,
+    id: 'uuid-agent-other',
+    agentId: 'agent-other',
+    name: 'Other Agent',
   };
 
   const mockMandate: schema.Mandate = {
@@ -52,6 +70,14 @@ describe('MandatesController', () => {
       findByApiKey: jest.fn().mockResolvedValue(mockAgent),
     };
 
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MandatesController],
       providers: [
@@ -62,6 +88,10 @@ describe('MandatesController', () => {
         {
           provide: AgentsService,
           useValue: mockAgentsService,
+        },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: mockLogger,
         },
         ApiKeyGuard,
       ],
@@ -124,13 +154,31 @@ describe('MandatesController', () => {
   });
 
   describe('findOne', () => {
-    it('should return mandate details', async () => {
+    it('should return mandate details when owned by authenticated agent', async () => {
       mockMandatesService.findOne.mockResolvedValue(mockMandate);
 
-      const result = await controller.findOne('mnd-abc123');
+      const request = {
+        agent: mockAgent,
+      } as Request & { agent: Agent };
+
+      const result = await controller.findOne('mnd-abc123', request);
 
       expect(result).toHaveProperty('mandateId');
       expect(result.mandateId).toBe(mockMandate.mandateId);
+      expect(mockMandatesService.findOne).toHaveBeenCalledWith('mnd-abc123');
+    });
+
+    it("should throw ForbiddenException when accessing another agent's mandate", async () => {
+      mockMandatesService.findOne.mockResolvedValue(mockMandate);
+
+      const request = {
+        agent: mockOtherAgent,
+      } as Request & { agent: Agent };
+
+      await expect(controller.findOne('mnd-abc123', request)).rejects.toThrow(
+        ForbiddenException,
+      );
+
       expect(mockMandatesService.findOne).toHaveBeenCalledWith('mnd-abc123');
     });
 
@@ -139,9 +187,13 @@ describe('MandatesController', () => {
         new NotFoundException('Mandate not found'),
       );
 
-      await expect(controller.findOne('mnd-nonexistent')).rejects.toThrow(
-        NotFoundException,
-      );
+      const request = {
+        agent: mockAgent,
+      } as Request & { agent: Agent };
+
+      await expect(
+        controller.findOne('mnd-nonexistent', request),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw NotFoundException when mandate expired', async () => {
@@ -149,7 +201,11 @@ describe('MandatesController', () => {
         new NotFoundException('Mandate expired'),
       );
 
-      await expect(controller.findOne('mnd-expired')).rejects.toThrow(
+      const request = {
+        agent: mockAgent,
+      } as Request & { agent: Agent };
+
+      await expect(controller.findOne('mnd-expired', request)).rejects.toThrow(
         NotFoundException,
       );
     });

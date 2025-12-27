@@ -237,9 +237,25 @@ export class PolicyComposerService {
     return patterns.some((pattern) => this.matchesPattern(tool, pattern));
   }
 
+  private validateGlobPattern(pattern: string): void {
+    if (pattern.length > 100) {
+      throw new Error(`Glob pattern too long: ${pattern}`);
+    }
+
+    if (!/^[a-zA-Z0-9*_.-]+$/.test(pattern)) {
+      throw new Error(
+        `Invalid glob pattern: ${pattern}. Only alphanumeric, *, _, -, . allowed.`,
+      );
+    }
+  }
+
   private matchesPattern(tool: string, pattern: string): boolean {
-    // Simple glob matching: "web_*" matches "web_search"
-    const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+    this.validateGlobPattern(pattern);
+
+    const escaped = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*');
+    const regex = new RegExp('^' + escaped + '$');
     return regex.test(tool);
   }
 }

@@ -1,41 +1,56 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
 import { eq, and, gte, lte, desc, SQL } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { QueryAuditLogDto } from './dto/query-audit-log.dto';
+import { extractErrorInfo } from '../common/utils/error.utils';
 
 @Injectable()
 export class AuditService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private db: Database,
+    @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
   /**
    * Create single audit log entry
    */
   async create(dto: CreateAuditLogDto): Promise<schema.AuditLog> {
-    const [log] = await this.db
-      .insert(schema.auditLogs)
-      .values({
-        agentId: dto.agentId,
-        actionId: dto.actionId,
-        timestamp: new Date(dto.timestamp),
-        actionType: dto.actionType,
-        toolName: dto.toolName,
-        decision: dto.decision,
-        reason: dto.reason,
-        estimatedCost: dto.estimatedCost?.toString(),
-        actualCost: dto.actualCost?.toString(),
-        cumulativeCost: dto.cumulativeCost?.toString(),
-        context: dto.context,
-        matchedRules: dto.matchedRules,
-        metadata: dto.metadata,
-      })
-      .returning();
+    try {
+      const [log] = await this.db
+        .insert(schema.auditLogs)
+        .values({
+          agentId: dto.agentId,
+          actionId: dto.actionId,
+          timestamp: new Date(dto.timestamp),
+          actionType: dto.actionType,
+          toolName: dto.toolName,
+          decision: dto.decision,
+          reason: dto.reason,
+          estimatedCost: dto.estimatedCost?.toString(),
+          actualCost: dto.actualCost?.toString(),
+          cumulativeCost: dto.cumulativeCost?.toString(),
+          context: dto.context,
+          matchedRules: dto.matchedRules,
+          metadata: dto.metadata,
+        })
+        .returning();
 
-    return log;
+      return log;
+    } catch (error) {
+      const { message, stack } = extractErrorInfo(error);
+      this.logger.error('Failed to create audit log', {
+        error: message,
+        stack,
+        agentId: dto.agentId,
+        actionType: dto.actionType,
+      });
+      throw error;
+    }
   }
 
   /**

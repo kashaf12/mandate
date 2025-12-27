@@ -5,6 +5,7 @@ import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
 import { CreatePolicyDto } from './dto/create-policy.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 // Mock crypto utils
 jest.mock('../common/utils/crypto.utils', () => ({
@@ -23,12 +24,24 @@ describe('PoliciesService', () => {
       update: jest.fn(),
     } as Partial<Database>;
 
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PoliciesService,
         {
           provide: DATABASE_CONNECTION,
           useValue: mockDb,
+        },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: mockLogger,
         },
       ],
     }).compile();
@@ -203,7 +216,7 @@ describe('PoliciesService', () => {
   });
 
   describe('update', () => {
-    it('should create new version when updating policy', async () => {
+    it('should create new version when updating policy using transaction', async () => {
       const updateDto: UpdatePolicyDto = {
         description: 'Updated description',
       };
@@ -232,25 +245,79 @@ describe('PoliciesService', () => {
         createdBy: null,
       };
 
-      // Mock findOne (current version)
-      const mockLimit = jest.fn().mockResolvedValue([currentPolicy]);
+      // ✅ Mock transaction: create mock transaction context
+      const mockTxDb = {
+        select: jest.fn(),
+        insert: jest.fn(),
+      };
+
+      // Mock FOR UPDATE query within transaction
+      // The 'for' method is called with 'update' and returns a promise with results
+      const mockForUpdate = jest.fn().mockResolvedValue([currentPolicy]);
+      const mockLimit = jest.fn().mockReturnValue({
+        for: mockForUpdate,
+      });
       const mockOrderBy = jest.fn().mockReturnValue({ limit: mockLimit });
       const mockWhere = jest.fn().mockReturnValue({ orderBy: mockOrderBy });
       const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
-      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
+      mockTxDb.select.mockReturnValue({ from: mockFrom });
 
-      // Mock insert (new version)
+      // Mock insert within transaction
       const mockReturning = jest.fn().mockResolvedValue([newPolicy]);
       const mockValues = jest
         .fn()
         .mockReturnValue({ returning: mockReturning });
-      (mockDb.insert as jest.Mock).mockReturnValue({ values: mockValues });
+      mockTxDb.insert.mockReturnValue({ values: mockValues });
+
+      // Mock transaction method
+      mockDb.transaction = jest.fn(
+        async (callback: (tx: Database) => Promise<schema.Policy>) => {
+          return await callback(mockTxDb as unknown as Database);
+        },
+      ) as jest.Mock;
 
       const result = await service.update('policy-abc123', updateDto);
 
       expect(result.version).toBe(2);
       expect(result.description).toBe('Updated description');
-      expect(mockDb.insert).toHaveBeenCalledWith(schema.policies);
+      // ✅ Verify transaction was used
+      expect(mockDb.transaction).toHaveBeenCalled();
+      // ✅ Verify FOR UPDATE lock was applied
+      expect(mockTxDb.select).toHaveBeenCalled();
+      expect(mockTxDb.insert).toHaveBeenCalledWith(schema.policies);
+    });
+
+    it('should throw NotFoundException when policy not found in transaction', async () => {
+      const updateDto: UpdatePolicyDto = {
+        description: 'Updated description',
+      };
+
+      // Mock transaction
+      const mockTxDb = {
+        select: jest.fn(),
+      };
+
+      // Mock FOR UPDATE query returning empty (policy not found)
+      const mockForUpdate = jest.fn().mockResolvedValue([]);
+      const mockLimit = jest.fn().mockReturnValue({
+        for: mockForUpdate,
+      });
+      const mockOrderBy = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockWhere = jest.fn().mockReturnValue({ orderBy: mockOrderBy });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+      mockTxDb.select.mockReturnValue({ from: mockFrom });
+
+      mockDb.transaction = jest.fn(
+        async (callback: (tx: Database) => Promise<schema.Policy>) => {
+          return await callback(mockTxDb as unknown as Database);
+        },
+      ) as jest.Mock;
+
+      await expect(
+        service.update('policy-nonexistent', updateDto),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDb.transaction).toHaveBeenCalled();
     });
   });
 

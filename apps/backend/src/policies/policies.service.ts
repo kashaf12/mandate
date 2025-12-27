@@ -1,16 +1,20 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
 import { CreatePolicyDto } from './dto/create-policy.dto';
 import { UpdatePolicyDto } from './dto/update-policy.dto';
 import { generatePolicyId } from '../common/utils/crypto.utils';
+import { extractErrorInfo } from '../common/utils/error.utils';
 
 @Injectable()
 export class PoliciesService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private db: Database,
+    @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
   async create(createPolicyDto: CreatePolicyDto): Promise<schema.Policy> {
@@ -92,26 +96,48 @@ export class PoliciesService {
     policyId: string,
     updatePolicyDto: UpdatePolicyDto,
   ): Promise<schema.Policy> {
-    // Get current latest version
-    const currentPolicy = await this.findOne(policyId);
+    try {
+      return await this.db.transaction(async (tx) => {
+        const policies = await tx
+          .select()
+          .from(schema.policies)
+          .where(eq(schema.policies.policyId, policyId))
+          .orderBy(desc(schema.policies.version))
+          .limit(1)
+          .for('update');
 
-    // Create new version (immutable updates)
-    const newVersion = currentPolicy.version + 1;
+        if (policies.length === 0) {
+          throw new NotFoundException(`Policy ${policyId} not found`);
+        }
 
-    const [policy] = await this.db
-      .insert(schema.policies)
-      .values({
+        const currentPolicy = policies[0];
+        const newVersion = currentPolicy.version + 1;
+
+        const [policy] = await tx
+          .insert(schema.policies)
+          .values({
+            policyId,
+            version: newVersion,
+            name: currentPolicy.name,
+            description:
+              updatePolicyDto.description ?? currentPolicy.description,
+            authority: (updatePolicyDto.authority ??
+              currentPolicy.authority) as Record<string, string>,
+            createdBy: currentPolicy.createdBy,
+          })
+          .returning();
+
+        return policy;
+      });
+    } catch (error) {
+      const { message, stack } = extractErrorInfo(error);
+      this.logger.error('Failed to update policy', {
+        error: message,
+        stack,
         policyId,
-        version: newVersion,
-        name: currentPolicy.name, // Name cannot be changed
-        description: updatePolicyDto.description ?? currentPolicy.description,
-        authority: (updatePolicyDto.authority ??
-          currentPolicy.authority) as Record<string, string>,
-        createdBy: currentPolicy.createdBy,
-      })
-      .returning();
-
-    return policy;
+      });
+      throw error;
+    }
   }
 
   async findByIds(policyIds: string[]): Promise<schema.Policy[]> {

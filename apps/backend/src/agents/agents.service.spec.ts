@@ -9,6 +9,7 @@ import { UpdateAgentDto } from './dto/update-agent.dto';
 import { KillAgentDto } from './dto/kill-agent.dto';
 import { AuditService } from '../audit/audit.service';
 import { hashApiKey } from '../common/utils/crypto.utils';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 
 // Mock crypto utils
 jest.mock('../common/utils/crypto.utils', () => ({
@@ -63,7 +64,16 @@ describe('AgentsService', () => {
     mockLogKillSwitch = jest.fn().mockResolvedValue(undefined);
     mockAuditService = {
       logKillSwitch: mockLogKillSwitch,
+      create: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<AuditService>;
+
+    const mockLogger = {
+      error: jest.fn(),
+      warn: jest.fn(),
+      info: jest.fn(),
+      debug: jest.fn(),
+      log: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,6 +85,10 @@ describe('AgentsService', () => {
         {
           provide: AuditService,
           useValue: mockAuditService,
+        },
+        {
+          provide: WINSTON_MODULE_PROVIDER,
+          useValue: mockLogger,
         },
       ],
     }).compile();

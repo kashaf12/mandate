@@ -8,6 +8,7 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +23,8 @@ import { IssueMandateDto } from './dto/issue-mandate.dto';
 import { MandateResponseDto } from './dto/mandate-response.dto';
 import { MandateDetailDto } from './dto/mandate-detail.dto';
 import { ApiKeyGuard } from '../common/guards/api-key.guard';
+import { Request } from 'express';
+import { Agent } from '../database/schema';
 
 @ApiTags('mandates')
 @Controller('mandates')
@@ -88,8 +91,15 @@ export class MandatesController {
   })
   async findOne(
     @Param('mandateId') mandateId: string,
+    @Req() request: Request & { agent: Agent },
   ): Promise<MandateDetailDto> {
     const mandate = await this.mandatesService.findOne(mandateId);
+
+    // ✅ CRITICAL: Verify ownership (prevent cross-agent access)
+    if (mandate.agentId !== request.agent.agentId) {
+      throw new ForbiddenException('Access denied');
+    }
+
     return MandateDetailDto.fromEntity(mandate);
   }
 }
