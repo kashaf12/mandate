@@ -62,15 +62,15 @@ export class MandatesService {
         agentId,
         context,
         authority: effectiveAuthority as Record<string, any>,
-        // Store minimal references: rule_id + rule_version
+        // Store minimal references: ruleId + ruleVersion
         matchedRules: matchedRules.map((rule) => ({
-          rule_id: rule.ruleId,
-          rule_version: rule.version,
+          ruleId: rule.ruleId,
+          ruleVersion: rule.version,
         })),
-        // Store policy references: policy_id + policy_version
+        // Store policy references: policyId + policyVersion
         appliedPolicies: policies.map((policy) => ({
-          policy_id: policy.policyId,
-          policy_version: policy.version,
+          policyId: policy.policyId,
+          policyVersion: policy.version,
         })),
         expiresAt,
       })

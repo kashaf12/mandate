@@ -18,10 +18,10 @@ export const mandates = pgTable(
     context: jsonb('context').$type<Record<string, string>>().notNull(),
     authority: jsonb('authority').$type<Record<string, any>>().notNull(),
     matchedRules: jsonb('matched_rules')
-      .$type<Array<{ rule_id: string; rule_version: number }>>()
+      .$type<Array<{ ruleId: string; ruleVersion: number }>>()
       .notNull(),
     appliedPolicies: jsonb('applied_policies')
-      .$type<Array<{ policy_id: string; policy_version: number }>>()
+      .$type<Array<{ policyId: string; policyVersion: number }>>()
       .notNull(),
     issuedAt: timestamp('issued_at').defaultNow(),
     expiresAt: timestamp('expires_at').notNull(),

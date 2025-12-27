@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { Database } from './database.module';
+import { Injectable, Inject } from '@nestjs/common';
+import { Database, DATABASE_CONNECTION } from './database.module';
 
 @Injectable()
 export class DatabaseService {
-  constructor(private db: Database) {}
+  constructor(@Inject(DATABASE_CONNECTION) private db: Database) {}
 
   // Direct access for simple queries
   get connection(): Database {

@@ -48,8 +48,18 @@ export class PolicyComposerService {
     }
 
     if (policies.length === 1) {
-      // Single policy - return as-is
-      return policies[0].authority as Authority;
+      // Single policy - apply deny-always-wins rule
+      const authority = policies[0].authority as Authority;
+      const effective: Authority = { ...authority };
+
+      // Apply deny-always-wins rule
+      if (effective.deniedTools && effective.allowedTools) {
+        effective.allowedTools = effective.allowedTools.filter(
+          (tool) => !this.matchesAny(tool, effective.deniedTools),
+        );
+      }
+
+      return effective;
     }
 
     // Multiple policies - compose

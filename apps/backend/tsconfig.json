@@ -22,7 +22,8 @@
     "verbatimModuleSyntax": false,
     "esModuleInterop": true,
     "noEmit": false,
-    "allowImportingTsExtensions": false
+    "allowImportingTsExtensions": false,
+    "isolatedModules": true
   },
   "include": ["src/**/*", "test/**/*", "drizzle.config.ts"],
   "exclude": ["node_modules", "dist"]

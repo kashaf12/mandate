@@ -66,6 +66,12 @@ export class RuleResponseDto {
   })
   updatedAt: Date;
 
+  @ApiProperty({
+    description: 'Version of the rule',
+    example: 1,
+  })
+  version: number;
+
   static fromEntity(rule: Rule): RuleResponseDto {
     return {
       ruleId: rule.ruleId,
@@ -82,6 +88,7 @@ export class RuleResponseDto {
       active: rule.active ?? true,
       createdAt: rule.createdAt ?? new Date(),
       updatedAt: rule.updatedAt ?? new Date(),
+      version: rule.version ?? 1,
     };
   }
 }

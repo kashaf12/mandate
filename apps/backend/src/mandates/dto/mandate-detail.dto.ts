@@ -10,7 +10,7 @@ export class MandateDetailDto extends MandateResponseDto {
     description: 'Agent identifier',
     example: 'agent-abc123',
   })
-  agent_id: string;
+  agentId: string;
 
   @ApiProperty({
     description: 'Context used for policy matching',
@@ -19,50 +19,50 @@ export class MandateDetailDto extends MandateResponseDto {
   context: Record<string, string>;
 
   @ApiProperty({
-    description: 'Matched rules (rule_id + version references)',
+    description: 'Matched rules (ruleId + version references)',
     example: [
-      { rule_id: 'rule-free-tier', rule_version: 3 },
-      { rule_id: 'rule-prod-safety', rule_version: 1 },
+      { ruleId: 'rule-free-tier', ruleVersion: 3 },
+      { ruleId: 'rule-prod-safety', ruleVersion: 1 },
     ],
   })
-  matched_rules: Array<{ rule_id: string; rule_version: number }>;
+  matchedRules: Array<{ ruleId: string; ruleVersion: number }>;
 
   @ApiProperty({
-    description: 'Applied policies (policy_id + version references)',
+    description: 'Applied policies (policyId + version references)',
     example: [
-      { policy_id: 'policy-free-tier', policy_version: 5 },
-      { policy_id: 'policy-prod-guardrails', policy_version: 2 },
+      { policyId: 'policy-free-tier', policyVersion: 5 },
+      { policyId: 'policy-prod-guardrails', policyVersion: 2 },
     ],
   })
-  applied_policies: Array<{ policy_id: string; policy_version: number }>;
+  appliedPolicies: Array<{ policyId: string; policyVersion: number }>;
 
   @ApiProperty({
     description: 'Mandate issuance timestamp',
     example: '2025-12-27T15:00:00Z',
   })
-  issued_at: Date;
+  issuedAt: Date;
 
   static fromEntity(mandate: schema.Mandate): MandateDetailDto {
     const matchedRules =
       (mandate.matchedRules as Array<{
-        rule_id: string;
-        rule_version: number;
+        ruleId: string;
+        ruleVersion: number;
       }>) || [];
     const appliedPolicies =
       (mandate.appliedPolicies as Array<{
-        policy_id: string;
-        policy_version: number;
+        policyId: string;
+        policyVersion: number;
       }>) || [];
 
     return {
-      mandate_id: mandate.mandateId,
-      agent_id: mandate.agentId,
+      mandateId: mandate.mandateId,
+      agentId: mandate.agentId,
       context: mandate.context,
-      matched_rules: matchedRules,
-      applied_policies: appliedPolicies,
-      effective_authority: mandate.authority,
-      issued_at: mandate.issuedAt ?? new Date(),
-      expires_at: mandate.expiresAt,
+      matchedRules: matchedRules,
+      appliedPolicies: appliedPolicies,
+      effectiveAuthority: mandate.authority,
+      issuedAt: mandate.issuedAt ?? new Date(),
+      expiresAt: mandate.expiresAt,
     };
   }
 }

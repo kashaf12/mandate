@@ -9,7 +9,7 @@ export class MandateResponseDto {
     description: 'Unique mandate identifier',
     example: 'mnd-abc123xyz789',
   })
-  mandate_id: string;
+  mandateId: string;
 
   @ApiProperty({
     description: 'Composed effective authority (static enforcement rules)',
@@ -23,19 +23,19 @@ export class MandateResponseDto {
       modelConfig: { temperature: 0.7, maxTokens: 2000 },
     },
   })
-  effective_authority: Record<string, any>;
+  effectiveAuthority: Record<string, any>;
 
   @ApiProperty({
     description: 'Mandate expiration timestamp',
     example: '2025-12-27T15:05:00Z',
   })
-  expires_at: Date;
+  expiresAt: Date;
 
   static fromEntity(mandate: schema.Mandate): MandateResponseDto {
     return {
-      mandate_id: mandate.mandateId,
-      effective_authority: mandate.authority,
-      expires_at: mandate.expiresAt,
+      mandateId: mandate.mandateId,
+      effectiveAuthority: mandate.authority,
+      expiresAt: mandate.expiresAt,
     };
   }
 }
