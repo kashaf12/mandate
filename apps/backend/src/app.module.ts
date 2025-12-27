@@ -8,6 +8,7 @@ import { AgentsModule } from './agents/agents.module';
 import { validateEnv } from './config/env.validation';
 import { LoggerModule } from './common/logger/logger.module';
 import { HealthModule } from './health/health.module';
+import { PoliciesModule } from './policies/policies.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { HealthModule } from './health/health.module';
     DatabaseModule,
     AgentsModule,
     HealthModule,
+    PoliciesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
