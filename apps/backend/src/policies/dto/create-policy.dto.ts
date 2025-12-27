@@ -6,7 +6,6 @@ import {
   IsEmail,
   Length,
   IsNumber,
-  IsBoolean,
   IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -30,18 +29,28 @@ class RateLimitDto {
 
 export class ToolPolicyDto {
   @ApiProperty({
-    description: 'Whether this tool is allowed',
-    example: true,
-  })
-  @IsBoolean()
-  allowed: boolean;
-
-  @ApiProperty({
-    description: 'Cost per call for this tool',
+    description:
+      'Estimated cost per tool call (approximate, for local SDK hints only)',
     example: 0.05,
   })
   @IsNumber()
-  cost: number;
+  estimatedCost: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum execution timeout in milliseconds',
+    example: 30000,
+  })
+  @IsOptional()
+  @IsNumber()
+  timeout?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum retry attempts for this tool',
+    example: 3,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxRetries?: number;
 
   @ApiPropertyOptional({
     description: 'Rate limit specific to this tool',
@@ -53,9 +62,97 @@ export class ToolPolicyDto {
   rateLimit?: RateLimitDto;
 }
 
+class ExecutionLimitsDto {
+  @ApiPropertyOptional({
+    description: 'Maximum reasoning steps per execution',
+    example: 50,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxSteps?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum tool calls per execution',
+    example: 20,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxToolCalls?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum tokens per LLM call (hard ceiling)',
+    example: 4000,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxTokensPerCall?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum execution time in milliseconds',
+    example: 300000,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxExecutionTime?: number;
+}
+
+class ModelConfigDto {
+  @ApiPropertyOptional({
+    description: 'LLM temperature (default if not specified by SDK)',
+    example: 0.7,
+  })
+  @IsOptional()
+  @IsNumber()
+  temperature?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Default max tokens per LLM call (can be overridden up to executionLimits.maxTokensPerCall)',
+    example: 2000,
+  })
+  @IsOptional()
+  @IsNumber()
+  maxTokens?: number;
+
+  @ApiPropertyOptional({
+    description: 'Nucleus sampling parameter',
+    example: 0.9,
+  })
+  @IsOptional()
+  @IsNumber()
+  topP?: number;
+
+  @ApiPropertyOptional({
+    description: 'Presence penalty',
+    example: 0.0,
+  })
+  @IsOptional()
+  @IsNumber()
+  presencePenalty?: number;
+
+  @ApiPropertyOptional({
+    description: 'Frequency penalty',
+    example: 0.0,
+  })
+  @IsOptional()
+  @IsNumber()
+  frequencyPenalty?: number;
+
+  @ApiPropertyOptional({
+    description: 'Allowed LLM models',
+    example: ['gpt-4', 'claude-3-opus'],
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedModels?: string[];
+}
+
 class AuthorityDto {
   @ApiPropertyOptional({
-    description: 'Maximum total cumulative cost',
+    description:
+      'Maximum total cumulative cost (local SDK hint, not enforced globally in Phase 2)',
     example: 1.0,
   })
   @IsOptional()
@@ -63,28 +160,12 @@ class AuthorityDto {
   maxCostTotal?: number;
 
   @ApiPropertyOptional({
-    description: 'Maximum cost per single action',
+    description: 'Maximum cost per single action (local SDK hint)',
     example: 0.1,
   })
   @IsOptional()
   @IsNumber()
   maxCostPerCall?: number;
-
-  @ApiPropertyOptional({
-    description: 'Maximum LLM inference cost',
-    example: 0.5,
-  })
-  @IsOptional()
-  @IsNumber()
-  maxCognitionCost?: number;
-
-  @ApiPropertyOptional({
-    description: 'Maximum tool execution cost',
-    example: 0.3,
-  })
-  @IsOptional()
-  @IsNumber()
-  maxExecutionCost?: number;
 
   @ApiPropertyOptional({
     description: 'Global rate limit for all actions',
@@ -117,11 +198,11 @@ class AuthorityDto {
   deniedTools?: string[];
 
   @ApiPropertyOptional({
-    description: 'Tool-specific policies',
+    description: 'Tool-specific policies (costs, limits, timeouts)',
     example: {
       web_search: {
-        allowed: true,
-        cost: 0.05,
+        estimatedCost: 0.05,
+        timeout: 30000,
         rateLimit: { maxCalls: 10, windowMs: 3600000 },
       },
     },
@@ -129,6 +210,24 @@ class AuthorityDto {
   @IsOptional()
   @IsObject()
   toolPolicies?: Record<string, ToolPolicyDto>;
+
+  @ApiPropertyOptional({
+    description: 'Per-execution limits (enforced locally by SDK)',
+    type: ExecutionLimitsDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ExecutionLimitsDto)
+  executionLimits?: ExecutionLimitsDto;
+
+  @ApiPropertyOptional({
+    description: 'LLM model configuration (defaults and constraints)',
+    type: ModelConfigDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ModelConfigDto)
+  modelConfig?: ModelConfigDto;
 }
 
 export class CreatePolicyDto {
@@ -168,11 +267,13 @@ export class CreatePolicyDto {
       deniedTools: ['delete_*', 'execute_*'],
       toolPolicies: {
         web_search: {
-          allowed: true,
-          cost: 0.05,
+          estimatedCost: 0.05,
+          timeout: 30000,
           rateLimit: { maxCalls: 10, windowMs: 3600000 },
         },
       },
+      executionLimits: { maxSteps: 50, maxToolCalls: 20 },
+      modelConfig: { temperature: 0.7, maxTokens: 2000 },
     },
   })
   @ValidateNested()

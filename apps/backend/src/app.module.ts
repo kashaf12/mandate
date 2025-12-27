@@ -10,6 +10,7 @@ import { LoggerModule } from './common/logger/logger.module';
 import { HealthModule } from './health/health.module';
 import { PoliciesModule } from './policies/policies.module';
 import { RulesModule } from './rules/rules.module';
+import { MandatesModule } from './mandates/mandates.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RulesModule } from './rules/rules.module';
     HealthModule,
     PoliciesModule,
     RulesModule,
+    MandatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

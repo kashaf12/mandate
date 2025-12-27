@@ -3,18 +3,21 @@ import {
   uuid,
   varchar,
   text,
+  integer,
   jsonb,
   boolean,
   timestamp,
   index,
+  unique,
 } from 'drizzle-orm/pg-core';
 
-// Rules table - Context → policy mapping
+// Rules table - Context → policy mapping (versioned)
 export const rules = pgTable(
   'rules',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    ruleId: varchar('rule_id', { length: 64 }).notNull().unique(),
+    ruleId: varchar('rule_id', { length: 64 }).notNull(), // Remove .unique()
+    version: integer('version').notNull(), // Add versioning
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
     // Agent scoping (optional, null = applies to all agents)
@@ -38,6 +41,7 @@ export const rules = pgTable(
   (table) => [
     index('idx_rules_policy_id').on(table.policyId),
     index('idx_rules_active').on(table.active),
+    unique('unique_rule_version').on(table.ruleId, table.version), // Add unique constraint
   ],
 );
 

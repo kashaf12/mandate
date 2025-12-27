@@ -20,12 +20,12 @@ export class RuleEvaluatorService {
 
   /**
    * Evaluate context against all active rules.
-   * Returns matching policies.
+   * Returns matching policies and matched rules.
    */
   async evaluateContext(
     agentId: string,
     context: Record<string, string>,
-  ): Promise<schema.Policy[]> {
+  ): Promise<{ policies: schema.Policy[]; matchedRules: schema.Rule[] }> {
     // 1. Validate agent exists and is active
     const agent = await this.agentsService.findOne(agentId);
     if (agent.status !== 'active') {
@@ -48,7 +48,7 @@ export class RuleEvaluatorService {
       matchedRules.map((r) => r.policyId),
     );
 
-    return policies;
+    return { policies, matchedRules };
   }
 
   /**

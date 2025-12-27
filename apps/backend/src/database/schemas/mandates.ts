@@ -16,8 +16,13 @@ export const mandates = pgTable(
     mandateId: varchar('mandate_id', { length: 64 }).notNull().unique(),
     agentId: varchar('agent_id', { length: 64 }).notNull(),
     context: jsonb('context').$type<Record<string, string>>().notNull(),
-    authority: jsonb('authority').$type<Record<string, string>>().notNull(),
-    matchedRules: jsonb('matched_rules').$type<Array<string>>().notNull(),
+    authority: jsonb('authority').$type<Record<string, any>>().notNull(),
+    matchedRules: jsonb('matched_rules')
+      .$type<Array<{ rule_id: string; rule_version: number }>>()
+      .notNull(),
+    appliedPolicies: jsonb('applied_policies')
+      .$type<Array<{ policy_id: string; policy_version: number }>>()
+      .notNull(),
     issuedAt: timestamp('issued_at').defaultNow(),
     expiresAt: timestamp('expires_at').notNull(),
     version: integer('version').default(1),

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as schema from '../database/schema';
-import { ToolPolicyDto } from '../policies/dto/create-policy.dto';
+import { ToolPolicyDto } from 'src/policies/dto/create-policy.dto';
 
 interface RateLimit {
   maxCalls: number;
@@ -10,12 +10,24 @@ interface RateLimit {
 interface Authority {
   maxCostTotal?: number;
   maxCostPerCall?: number;
-  maxCognitionCost?: number;
-  maxExecutionCost?: number;
   rateLimit?: RateLimit;
   allowedTools?: string[];
   deniedTools?: string[];
-  toolPolicies?: Record<string, ToolPolicyDto>;
+  toolPolicies?: Record<string, any>;
+  executionLimits?: {
+    maxSteps?: number;
+    maxToolCalls?: number;
+    maxTokensPerCall?: number;
+    maxExecutionTime?: number;
+  };
+  modelConfig?: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    presencePenalty?: number;
+    frequencyPenalty?: number;
+    allowedModels?: string[];
+  };
 }
 
 @Injectable()
@@ -49,12 +61,6 @@ export class PolicyComposerService {
     effective.maxCostTotal = this.min(authorities.map((a) => a.maxCostTotal));
     effective.maxCostPerCall = this.min(
       authorities.map((a) => a.maxCostPerCall),
-    );
-    effective.maxCognitionCost = this.min(
-      authorities.map((a) => a.maxCognitionCost),
-    );
-    effective.maxExecutionCost = this.min(
-      authorities.map((a) => a.maxExecutionCost),
     );
 
     // 2. Rate limits: MIN
@@ -90,7 +96,48 @@ export class PolicyComposerService {
     // 5. Tool policies: compose individually
     effective.toolPolicies = this.composeToolPolicies(authorities);
 
-    // 6. Apply deny-always-wins rule
+    // 6. Execution limits: MIN (most restrictive)
+    const executionLimits = authorities
+      .map((a) => a.executionLimits)
+      .filter((e) => e !== undefined);
+
+    if (executionLimits.length > 0) {
+      effective.executionLimits = {
+        maxSteps: this.min(executionLimits.map((e) => e.maxSteps)),
+        maxToolCalls: this.min(executionLimits.map((e) => e.maxToolCalls)),
+        maxTokensPerCall: this.min(
+          executionLimits.map((e) => e.maxTokensPerCall),
+        ),
+        maxExecutionTime: this.min(
+          executionLimits.map((e) => e.maxExecutionTime),
+        ),
+      };
+    }
+
+    // 7. Model config: MIN for numeric, INTERSECTION for arrays
+    const modelConfigs = authorities
+      .map((a) => a.modelConfig)
+      .filter((m) => m !== undefined);
+
+    if (modelConfigs.length > 0) {
+      const allowedModelsArrays = modelConfigs
+        .map((m) => m.allowedModels)
+        .filter((m) => m !== undefined && m.length > 0);
+
+      effective.modelConfig = {
+        temperature: this.min(modelConfigs.map((m) => m.temperature)),
+        maxTokens: this.min(modelConfigs.map((m) => m.maxTokens)),
+        topP: this.min(modelConfigs.map((m) => m.topP)),
+        presencePenalty: this.min(modelConfigs.map((m) => m.presencePenalty)),
+        frequencyPenalty: this.min(modelConfigs.map((m) => m.frequencyPenalty)),
+        allowedModels:
+          allowedModelsArrays.length > 0
+            ? this.intersection(...allowedModelsArrays)
+            : undefined,
+      };
+    }
+
+    // 8. Apply deny-always-wins rule
     if (effective.deniedTools && effective.allowedTools) {
       effective.allowedTools = effective.allowedTools.filter(
         (tool) => !this.matchesAny(tool, effective.deniedTools),
@@ -116,10 +163,8 @@ export class PolicyComposerService {
     return [...new Set(arrays.flat())];
   }
 
-  private composeToolPolicies(
-    authorities: Authority[],
-  ): Record<string, ToolPolicyDto> {
-    const composed: Record<string, ToolPolicyDto> = {};
+  private composeToolPolicies(authorities: Authority[]): Record<string, any> {
+    const composed: Record<string, any> = {};
 
     // Collect all tool names
     const toolNames = new Set<string>();
@@ -132,23 +177,46 @@ export class PolicyComposerService {
     // Compose each tool
     toolNames.forEach((toolName) => {
       const toolPolicies = authorities
-        .map((auth) => auth.toolPolicies?.[toolName])
+        .map((auth) => auth.toolPolicies?.[toolName] as ToolPolicyDto)
         .filter((tp) => tp !== undefined);
 
       if (toolPolicies.length === 0) return;
 
-      // All must allow
-      const allowed = toolPolicies.every((tp) => tp.allowed);
-
-      // MIN cost
+      // MIN estimatedCost
       const costs = toolPolicies
-        .map((tp) => tp.cost)
+        .map((tp) => tp.estimatedCost)
         .filter((c) => c !== undefined);
-      const cost = costs.length > 0 ? Math.min(...costs) : undefined;
+      const estimatedCost = costs.length > 0 ? Math.min(...costs) : undefined;
+
+      // MIN timeout
+      const timeouts = toolPolicies
+        .map((tp) => tp.timeout)
+        .filter((t) => t !== undefined);
+      const timeout = timeouts.length > 0 ? Math.min(...timeouts) : undefined;
+
+      // MIN maxRetries
+      const retries = toolPolicies
+        .map((tp) => tp.maxRetries)
+        .filter((r) => r !== undefined);
+      const maxRetries = retries.length > 0 ? Math.min(...retries) : undefined;
+
+      // MIN rateLimit (if present)
+      const rateLimits = toolPolicies
+        .map((tp) => tp.rateLimit)
+        .filter((r) => r !== undefined);
+      const rateLimit =
+        rateLimits.length > 0
+          ? {
+              maxCalls: Math.min(...rateLimits.map((r) => r.maxCalls)),
+              windowMs: Math.min(...rateLimits.map((r) => r.windowMs)),
+            }
+          : undefined;
 
       composed[toolName] = {
-        allowed,
-        cost,
+        estimatedCost,
+        timeout,
+        maxRetries,
+        ...(rateLimit && { rateLimit }),
       };
     });
 
