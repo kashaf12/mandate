@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { AgentsService } from './agents.service';
 import { DATABASE_CONNECTION, Database } from '../database/database.module';
 import * as schema from '../database/schema';
@@ -105,7 +109,6 @@ describe('AgentsService', () => {
       const createDto: CreateAgentDto = {
         name: 'Test Agent',
         principal: 'test@example.com',
-        environment: 'production',
       };
 
       const mockAgent: schema.Agent = {
@@ -114,7 +117,6 @@ describe('AgentsService', () => {
         apiKeyHash: 'hashed-sk-test-api-key-123',
         name: 'Test Agent',
         principal: 'test@example.com',
-        environment: 'production',
         status: 'active',
         metadata: {},
         createdAt: new Date(),
@@ -139,40 +141,6 @@ describe('AgentsService', () => {
           apiKeyHash: 'hashed-sk-test-api-key-123',
           name: 'Test Agent',
           principal: 'test@example.com',
-          environment: 'production',
-        }),
-      );
-    });
-
-    it('should use default environment if not provided', async () => {
-      const createDto: CreateAgentDto = {
-        name: 'Test Agent',
-      };
-
-      const mockAgent: schema.Agent = {
-        id: 'uuid-123',
-        agentId: 'agent-abc123',
-        apiKeyHash: 'hashed-sk-test-api-key-123',
-        name: 'Test Agent',
-        principal: null,
-        environment: 'development',
-        status: 'active',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const mockReturning = jest.fn().mockResolvedValue([mockAgent]);
-      const mockValues = jest
-        .fn()
-        .mockReturnValue({ returning: mockReturning });
-      (mockDb.insert as jest.Mock).mockReturnValue({ values: mockValues });
-
-      await service.create(createDto);
-
-      expect(mockValues).toHaveBeenCalledWith(
-        expect.objectContaining({
-          environment: 'development',
         }),
       );
     });
@@ -186,7 +154,6 @@ describe('AgentsService', () => {
         apiKeyHash: 'hashed-key',
         name: 'Test Agent',
         principal: null,
-        environment: 'production',
         status: 'active',
         metadata: {},
         createdAt: new Date(),
@@ -230,7 +197,6 @@ describe('AgentsService', () => {
         apiKeyHash: hashApiKey(apiKey),
         name: 'Test Agent',
         principal: null,
-        environment: 'production',
         status: 'active',
         metadata: {},
         createdAt: new Date(),
@@ -267,7 +233,6 @@ describe('AgentsService', () => {
         apiKeyHash: hashApiKey(apiKey),
         name: 'Test Agent',
         principal: null,
-        environment: 'production',
         status: 'inactive',
         metadata: {},
         createdAt: new Date(),
@@ -295,7 +260,6 @@ describe('AgentsService', () => {
           apiKeyHash: 'hash-1',
           name: 'Agent 1',
           principal: null,
-          environment: 'production',
           status: 'active',
           metadata: {},
           createdAt: new Date(),
@@ -307,7 +271,6 @@ describe('AgentsService', () => {
           apiKeyHash: 'hash-2',
           name: 'Agent 2',
           principal: null,
-          environment: 'production',
           status: 'active',
           metadata: {},
           createdAt: new Date(),
@@ -344,7 +307,6 @@ describe('AgentsService', () => {
           apiKeyHash: 'hash-1',
           name: 'Agent 1',
           principal: null,
-          environment: 'production',
           status: 'active',
           metadata: {},
           createdAt: new Date(),
@@ -368,7 +330,6 @@ describe('AgentsService', () => {
       const agentId = 'agent-abc123';
       const updateDto: UpdateAgentDto = {
         name: 'Updated Name',
-        status: 'inactive',
       };
 
       const mockUpdatedAgent: schema.Agent = {
@@ -377,7 +338,6 @@ describe('AgentsService', () => {
         apiKeyHash: 'hash',
         name: 'Updated Name',
         principal: null,
-        environment: 'production',
         status: 'inactive',
         metadata: {},
         createdAt: new Date(),
@@ -396,7 +356,6 @@ describe('AgentsService', () => {
       expect(mockSet).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'Updated Name',
-          status: 'inactive',
           updatedAt: expect.any(Date) as Date,
         }) as Record<string, unknown>,
       );
@@ -423,7 +382,6 @@ describe('AgentsService', () => {
         apiKeyHash: 'hash',
         name: 'Test Agent',
         principal: null,
-        environment: 'production',
         status: 'inactive',
         metadata: {},
         createdAt: new Date(),
@@ -453,6 +411,182 @@ describe('AgentsService', () => {
     });
   });
 
+  describe('setStatus', () => {
+    const agentId = 'agent-123';
+
+    const createMockAgent = (status: 'active' | 'inactive'): schema.Agent => ({
+      id: 'uuid-123',
+      agentId: 'agent-123',
+      apiKeyHash: 'hash',
+      name: 'Test Agent',
+      principal: null,
+      status,
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    it('should return agent without update if status already matches (idempotent)', async () => {
+      const mockAgent = createMockAgent('active');
+
+      const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
+      const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
+
+      const result = await service.setStatus(agentId, 'active');
+
+      expect(result).toEqual(mockAgent);
+      expect(result.status).toBe('active');
+      // Verify update was NOT called (idempotent)
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should update status from inactive to active', async () => {
+      const mockAgent = createMockAgent('inactive');
+      const updatedAgent = createMockAgent('active');
+
+      // Mock findOne
+      const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
+      const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
+
+      // Mock isKilled check (no kill switch)
+      const mockKillSwitchLimit = jest.fn().mockResolvedValue([]);
+      const mockKillSwitchWhere = jest.fn().mockReturnValue({
+        limit: mockKillSwitchLimit,
+      });
+      const mockKillSwitchFrom = jest.fn().mockReturnValue({
+        where: mockKillSwitchWhere,
+      });
+
+      // Mock update
+      const mockReturning = jest.fn().mockResolvedValue([updatedAgent]);
+      const mockWhereUpdate = jest.fn().mockReturnValue({
+        returning: mockReturning,
+      });
+      const mockSet = jest.fn().mockReturnValue({ where: mockWhereUpdate });
+      (mockDb.update as jest.Mock).mockReturnValue({ set: mockSet });
+
+      // Setup isKilled mock
+      (mockDb.select as jest.Mock)
+        .mockReturnValueOnce({ from: mockFrom }) // first call: findOne
+        .mockReturnValueOnce({ from: mockKillSwitchFrom }); // second call: isKilled
+
+      const result = await service.setStatus(agentId, 'active');
+
+      expect(result.status).toBe('active');
+      expect(mockDb.update).toHaveBeenCalledWith(schema.agents);
+      expect(mockSet).toHaveBeenCalledWith({
+        status: 'active',
+        updatedAt: expect.any(Date) as Date,
+      });
+    });
+
+    it('should update status from active to inactive', async () => {
+      const mockAgent = createMockAgent('active');
+      const updatedAgent = createMockAgent('inactive');
+
+      // Mock findOne
+      const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
+      const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
+
+      // Mock update (no kill switch check for inactive)
+      const mockReturning = jest.fn().mockResolvedValue([updatedAgent]);
+      const mockWhereUpdate = jest.fn().mockReturnValue({
+        returning: mockReturning,
+      });
+      const mockSet = jest.fn().mockReturnValue({ where: mockWhereUpdate });
+      (mockDb.update as jest.Mock).mockReturnValue({ set: mockSet });
+
+      const result = await service.setStatus(agentId, 'inactive');
+
+      expect(result.status).toBe('inactive');
+      expect(mockDb.update).toHaveBeenCalledWith(schema.agents);
+      expect(mockSet).toHaveBeenCalledWith({
+        status: 'inactive',
+        updatedAt: expect.any(Date) as Date,
+      });
+    });
+
+    it('should throw BadRequestException when activating agent with kill switch', async () => {
+      const mockAgent = createMockAgent('inactive');
+
+      // Mock findOne (called by setStatus)
+      const mockLimit1 = jest.fn().mockResolvedValue([mockAgent]);
+      const mockWhere1 = jest.fn().mockReturnValue({ limit: mockLimit1 });
+      const mockFrom1 = jest.fn().mockReturnValue({ where: mockWhere1 });
+
+      // Mock isKilled check (kill switch exists)
+      const mockKillSwitch = {
+        agentId: 'agent-123',
+        killedAt: new Date(),
+        reason: 'Test',
+        killedBy: 'admin@example.com',
+      };
+      const mockKillSwitchLimit = jest.fn().mockResolvedValue([mockKillSwitch]);
+      const mockKillSwitchWhere = jest.fn().mockReturnValue({
+        limit: mockKillSwitchLimit,
+      });
+      const mockKillSwitchFrom = jest.fn().mockReturnValue({
+        where: mockKillSwitchWhere,
+      });
+
+      // Setup mocks: findOne first, then isKilled
+      (mockDb.select as jest.Mock)
+        .mockReturnValueOnce({ from: mockFrom1 }) // first call: findOne in setStatus
+        .mockReturnValueOnce({ from: mockKillSwitchFrom }); // second call: isKilled in setStatus
+
+      // Expect BadRequestException with specific message
+      await expect(service.setStatus(agentId, 'active')).rejects.toThrow(
+        new BadRequestException(
+          'Cannot activate agent with active kill switch. Use POST /agents/:agentId/resurrect to remove kill switch first.',
+        ),
+      );
+
+      // Verify update was NOT called
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow setting inactive when kill switch exists', async () => {
+      const mockAgent = createMockAgent('active');
+      const updatedAgent = createMockAgent('inactive');
+
+      // Mock findOne
+      const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
+      const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
+
+      // Mock update (kill switch check not performed for inactive)
+      const mockReturning = jest.fn().mockResolvedValue([updatedAgent]);
+      const mockWhereUpdate = jest.fn().mockReturnValue({
+        returning: mockReturning,
+      });
+      const mockSet = jest.fn().mockReturnValue({ where: mockWhereUpdate });
+      (mockDb.update as jest.Mock).mockReturnValue({ set: mockSet });
+
+      const result = await service.setStatus(agentId, 'inactive');
+
+      expect(result.status).toBe('inactive');
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if agent not found', async () => {
+      const mockLimit = jest.fn().mockResolvedValue([]);
+      const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
+
+      await expect(
+        service.setStatus('agent-nonexistent', 'active'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('kill', () => {
     it('should kill agent', async () => {
       const agentId = 'agent-123';
@@ -467,28 +601,39 @@ describe('AgentsService', () => {
         apiKeyHash: 'hash',
         name: 'Test Agent',
         principal: null,
-        environment: 'production',
         status: 'active',
         metadata: {},
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      // Mock findOne
+      // Mock findOne (called once by kill, once by setStatus)
       const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
       const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
       const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
-      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
 
-      // Mock insert kill switch
-      const mockOnConflict = jest.fn().mockResolvedValue([]);
-      const mockValues = jest.fn().mockReturnValue({
-        onConflictDoUpdate: mockOnConflict,
+      // Mock isKilled (returns false - not already killed)
+      const mockKillSwitchLimit = jest.fn().mockResolvedValue([]);
+      const mockKillSwitchWhere = jest.fn().mockReturnValue({
+        limit: mockKillSwitchLimit,
       });
+      const mockKillSwitchFrom = jest.fn().mockReturnValue({
+        where: mockKillSwitchWhere,
+      });
+
+      // Setup select mock to handle multiple calls
+      (mockDb.select as jest.Mock)
+        .mockReturnValueOnce({ from: mockFrom }) // findOne
+        .mockReturnValueOnce({ from: mockKillSwitchFrom }) // isKilled
+        .mockReturnValueOnce({ from: mockFrom }); // setStatus -> findOne
+
+      // Mock insert kill switch (no longer uses onConflictDoUpdate)
+      const mockValues = jest.fn().mockResolvedValue([]);
       (mockDb.insert as jest.Mock).mockReturnValue({ values: mockValues });
 
-      // Mock update agent
-      const mockReturning = jest.fn().mockResolvedValue([mockAgent]);
+      // Mock update agent (called by setStatus)
+      const updatedAgent = { ...mockAgent, status: 'inactive' as const };
+      const mockReturning = jest.fn().mockResolvedValue([updatedAgent]);
       const mockWhereUpdate = jest.fn().mockReturnValue({
         returning: mockReturning,
       });
@@ -503,6 +648,66 @@ describe('AgentsService', () => {
         dto.reason,
         dto.killedBy,
       );
+    });
+
+    it('should throw ConflictException if agent is already killed', async () => {
+      const agentId = 'agent-123';
+      const dto: KillAgentDto = {
+        reason: 'Another reason',
+        killedBy: 'admin@example.com',
+      };
+
+      const mockAgent: schema.Agent = {
+        id: 'uuid-123',
+        agentId: 'agent-123',
+        apiKeyHash: 'hash',
+        name: 'Test Agent',
+        principal: null,
+        status: 'inactive',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Mock findOne
+      const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
+      const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
+      const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+
+      // Mock isKilled (returns true - already killed)
+      const existingKillSwitch = {
+        agentId,
+        killedAt: new Date('2024-01-01T00:00:00Z'),
+        reason: 'Original reason',
+        killedBy: 'original@example.com',
+      };
+      const mockKillSwitchLimit = jest
+        .fn()
+        .mockResolvedValue([existingKillSwitch]);
+      const mockKillSwitchWhere = jest.fn().mockReturnValue({
+        limit: mockKillSwitchLimit,
+      });
+      const mockKillSwitchFrom = jest.fn().mockReturnValue({
+        where: mockKillSwitchWhere,
+      });
+
+      // Setup select mock - provide mocks for both test calls
+      (mockDb.select as jest.Mock)
+        .mockReturnValueOnce({ from: mockFrom }) // findOne (first call)
+        .mockReturnValueOnce({ from: mockKillSwitchFrom }) // isKilled (first call)
+        .mockReturnValueOnce({ from: mockFrom }) // findOne (second call)
+        .mockReturnValueOnce({ from: mockKillSwitchFrom }); // isKilled (second call)
+
+      await expect(service.kill(agentId, dto)).rejects.toThrow(
+        ConflictException,
+      );
+      await expect(service.kill(agentId, dto)).rejects.toThrow(
+        'Agent agent-123 is already killed.',
+      );
+
+      // Verify insert was NOT called
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockLogKillSwitch).not.toHaveBeenCalled();
     });
   });
 
@@ -586,18 +791,16 @@ describe('AgentsService', () => {
         apiKeyHash: 'hash',
         name: 'Test Agent',
         principal: null,
-        environment: 'production',
         status: 'inactive',
         metadata: {},
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      // Mock findOne
+      // Mock findOne chain (used by both resurrect and setStatus)
       const mockLimit = jest.fn().mockResolvedValue([mockAgent]);
       const mockWhere = jest.fn().mockReturnValue({ limit: mockLimit });
       const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
-      (mockDb.select as jest.Mock).mockReturnValue({ from: mockFrom });
 
       // Mock delete kill switch
       const mockWhereDelete = jest.fn().mockResolvedValue([]);
@@ -605,15 +808,32 @@ describe('AgentsService', () => {
         where: mockWhereDelete,
       });
 
-      // Mock update agent
-      const mockReturning = jest
-        .fn()
-        .mockResolvedValue([{ ...mockAgent, status: 'active' }]);
+      // Mock isKilled check (called by setStatus when activating)
+      const mockKillSwitchLimit = jest.fn().mockResolvedValue([]);
+      const mockKillSwitchWhere = jest.fn().mockReturnValue({
+        limit: mockKillSwitchLimit,
+      });
+      const mockKillSwitchFrom = jest.fn().mockReturnValue({
+        where: mockKillSwitchWhere,
+      });
+
+      // Mock update agent (called by setStatus)
+      const updatedAgent = { ...mockAgent, status: 'active' as const };
+      const mockReturning = jest.fn().mockResolvedValue([updatedAgent]);
       const mockWhereUpdate = jest.fn().mockReturnValue({
         returning: mockReturning,
       });
       const mockSet = jest.fn().mockReturnValue({ where: mockWhereUpdate });
       (mockDb.update as jest.Mock).mockReturnValue({ set: mockSet });
+
+      // Setup select mocks:
+      // 1. findOne in resurrect()
+      // 2. findOne in setStatus()
+      // 3. isKilled check in setStatus()
+      (mockDb.select as jest.Mock)
+        .mockReturnValueOnce({ from: mockFrom }) // resurrect findOne
+        .mockReturnValueOnce({ from: mockFrom }) // setStatus findOne
+        .mockReturnValueOnce({ from: mockKillSwitchFrom }); // setStatus isKilled
 
       await service.resurrect(agentId);
 

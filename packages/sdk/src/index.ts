@@ -108,3 +108,59 @@ export {
   createStateManager,
   createDistributedStateManager,
 } from "./state/factory";
+
+// Backend Client (Phase 3)
+export { BackendClient } from "./backend/client";
+export type { BackendClientConfig } from "./backend/types";
+export {
+  BackendError,
+  BackendUnavailableError,
+  BackendClientError,
+  BackendServerError,
+  BackendTimeoutError,
+} from "./backend/errors";
+
+// Backend Mandate API (Phase 3)
+export { MandateAPI } from "./backend/mandate-api";
+export type {
+  BackendMandateResponse,
+  BackendMandateDetail,
+  IssueMandateRequest,
+} from "./backend/mandate-types";
+
+// Backend Audit API (Phase 3)
+export { AuditAPI } from "./backend/audit-api";
+export type {
+  BulkCreateAuditLogsRequest,
+  BulkCreateAuditLogsResponse,
+  BackendAuditLog,
+  QueryAuditLogsRequest,
+  BackendAuditLogResponse,
+} from "./backend/audit-types";
+
+// Backend Kill Switch API (Phase 3)
+export { KillSwitchAPI } from "./backend/killswitch-api";
+export type {
+  KillStatusResponse,
+  KillAgentRequest,
+  KillAgentResponse,
+} from "./backend/killswitch-types";
+
+// Unified Backend API (Phase 3) - Primary export for backend operations
+export { MandateBackend } from "./backend/backend";
+export type {
+  MandateBackendConfig,
+  HealthCheckResponse,
+} from "./backend/backend";
+
+// Backend Mandate Cache (Phase 3)
+export { MandateCache } from "./backend/mandate-cache";
+export type { MandateCacheConfig } from "./backend/mandate-cache";
+
+// Backend Mandate Manager (Phase 3)
+export { MandateManager } from "./backend/mandate-manager";
+export type { MandateManagerConfig } from "./backend/mandate-manager";
+
+// Backend Audit Batcher (Phase 3)
+export { AuditBatcher } from "./backend/audit-batcher";
+export type { AuditBatcherConfig, BatcherStats } from "./backend/audit-batcher";

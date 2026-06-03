@@ -1,12 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthIndicatorService } from '@nestjs/terminus';
 import { DatabaseHealthIndicator } from './database.health';
-import {
-  DATABASE_CONNECTION,
-  DATABASE_POOL,
-  Database,
-} from '../database/database.module';
-import { Pool } from 'pg';
+import { DATABASE_CONNECTION, Database } from '../database/database.module';
 
 describe('DatabaseHealthIndicator', () => {
   let indicator: DatabaseHealthIndicator;
@@ -22,15 +17,6 @@ describe('DatabaseHealthIndicator', () => {
       execute: jest.Mock;
     };
 
-    const mockPool = {
-      totalCount: 5,
-      idleCount: 3,
-      waitingCount: 0,
-      options: {
-        max: 20,
-      },
-    } as Partial<Pool> as Pool;
-
     mockHealthIndicatorService = {
       check: jest.fn(),
     } as jest.Mocked<HealthIndicatorService>;
@@ -41,10 +27,6 @@ describe('DatabaseHealthIndicator', () => {
         {
           provide: DATABASE_CONNECTION,
           useValue: mockDb,
-        },
-        {
-          provide: DATABASE_POOL,
-          useValue: mockPool,
         },
         {
           provide: HealthIndicatorService,
@@ -65,8 +47,6 @@ describe('DatabaseHealthIndicator', () => {
       const mockUp = jest.fn().mockReturnValue({
         database: {
           status: 'up',
-          pool: { total: 5, idle: 3, waiting: 0 },
-          maxConnections: 20,
         },
       });
       mockHealthIndicatorService.check.mockReturnValue({
@@ -78,16 +58,11 @@ describe('DatabaseHealthIndicator', () => {
       const result = await indicator.isHealthy('database');
 
       expect(result.database.status).toBe('up');
-      expect(result.database.pool).toEqual({ total: 5, idle: 3, waiting: 0 });
-      expect(result.database.maxConnections).toBe(20);
       expect((mockDb.execute as jest.Mock).mock.calls).toEqual([['SELECT 1']]);
       expect(
         (mockHealthIndicatorService.check as jest.Mock).mock.calls,
       ).toEqual([['database']]);
-      expect(mockUp).toHaveBeenCalledWith({
-        pool: { total: 5, idle: 3, waiting: 0 },
-        maxConnections: 20,
-      });
+      expect(mockUp).toHaveBeenCalledWith();
     });
 
     it('should return down status when database query fails', async () => {
@@ -96,7 +71,6 @@ describe('DatabaseHealthIndicator', () => {
         database: {
           status: 'down',
           message: 'Connection refused',
-          pool: { total: 5, idle: 3, waiting: 0 },
         },
       });
       mockHealthIndicatorService.check.mockReturnValue({
@@ -109,12 +83,8 @@ describe('DatabaseHealthIndicator', () => {
 
       expect(result.database.status).toBe('down');
       expect(result.database.message).toBe('Connection refused');
-      expect(result.database.pool).toEqual({ total: 5, idle: 3, waiting: 0 });
       expect(mockDb.execute).toHaveBeenCalledWith('SELECT 1');
-      expect(mockDown).toHaveBeenCalledWith({
-        message: 'Connection refused',
-        pool: { total: 5, idle: 3, waiting: 0 },
-      });
+      expect(mockDown).toHaveBeenCalledWith('Connection refused');
     });
 
     it('should handle timeout errors', async () => {

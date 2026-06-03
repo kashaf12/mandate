@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { AgentsController } from './agents.controller';
 import { AgentsService } from './agents.service';
 import { ApiKeyGuard } from '../common/guards/api-key.guard';
@@ -22,6 +26,7 @@ describe('AgentsController', () => {
     kill: jest.Mock;
     getKillStatus: jest.Mock;
     resurrect: jest.Mock;
+    setStatus: jest.Mock;
   };
 
   const mockAgent: schema.Agent = {
@@ -30,7 +35,6 @@ describe('AgentsController', () => {
     apiKeyHash: 'hashed-key',
     name: 'Test Agent',
     principal: 'test@example.com',
-    environment: 'production',
     status: 'active',
     metadata: {},
     createdAt: new Date(),
@@ -52,6 +56,7 @@ describe('AgentsController', () => {
       kill: jest.fn(),
       getKillStatus: jest.fn(),
       resurrect: jest.fn(),
+      setStatus: jest.fn(),
     };
 
     const mockLogger = {
@@ -165,6 +170,110 @@ describe('AgentsController', () => {
         NotFoundException,
       );
       expect(mockAgentsService.findOne).toHaveBeenCalledWith('agent-abc123');
+    });
+  });
+
+  describe('getStatus', () => {
+    it('should return agent status and kill switch info', async () => {
+      mockAgentsService.findOne.mockResolvedValue(mockAgent);
+      mockAgentsService.getKillStatus.mockResolvedValue({
+        is_killed: false,
+      });
+
+      const result = await controller.getStatus('agent-abc123');
+
+      expect(result.status).toBe('active');
+      expect(result.is_killed).toBe(false);
+      expect(mockAgentsService.findOne).toHaveBeenCalledWith('agent-abc123');
+      expect(mockAgentsService.getKillStatus).toHaveBeenCalledWith(
+        'agent-abc123',
+      );
+    });
+
+    it('should return kill switch details when agent is killed', async () => {
+      mockAgentsService.findOne.mockResolvedValue(mockAgent);
+      mockAgentsService.getKillStatus.mockResolvedValue({
+        is_killed: true,
+        killed_at: new Date('2024-12-27T10:00:00Z'),
+        reason: 'Runaway costs',
+        killed_by: 'admin@example.com',
+      });
+
+      const result = await controller.getStatus('agent-abc123');
+
+      expect(result.status).toBe('active');
+      expect(result.is_killed).toBe(true);
+      expect(result.killed_at).toBeDefined();
+      expect(result.reason).toBe('Runaway costs');
+      expect(result.killed_by).toBe('admin@example.com');
+    });
+
+    it('should throw NotFoundException when agent not found', async () => {
+      mockAgentsService.findOne.mockRejectedValue(
+        new NotFoundException('Agent agent-abc123 not found'),
+      );
+
+      await expect(controller.getStatus('agent-abc123')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('should update status successfully', async () => {
+      const updatedAgent = { ...mockAgent, status: 'inactive' as const };
+      mockAgentsService.setStatus.mockResolvedValue(updatedAgent);
+
+      const result = await controller.updateStatus('agent-abc123', {
+        status: 'inactive',
+      });
+
+      expect(result.status).toBe('inactive');
+      expect(mockAgentsService.setStatus).toHaveBeenCalledWith(
+        'agent-abc123',
+        'inactive',
+      );
+    });
+
+    it('should return 200 on idempotent request (same status)', async () => {
+      mockAgentsService.setStatus.mockResolvedValue(mockAgent);
+
+      const result = await controller.updateStatus('agent-abc123', {
+        status: 'active',
+      });
+
+      expect(result.status).toBe('active');
+      expect(mockAgentsService.setStatus).toHaveBeenCalledWith(
+        'agent-abc123',
+        'active',
+      );
+    });
+
+    it('should throw BadRequestException when activating with kill switch', async () => {
+      mockAgentsService.setStatus.mockRejectedValue(
+        new BadRequestException(
+          'Cannot activate agent with active kill switch. Use POST /agents/:agentId/resurrect to remove kill switch first.',
+        ),
+      );
+
+      await expect(
+        controller.updateStatus('agent-abc123', { status: 'active' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockAgentsService.setStatus).toHaveBeenCalledWith(
+        'agent-abc123',
+        'active',
+      );
+    });
+
+    it('should throw NotFoundException when agent not found', async () => {
+      mockAgentsService.setStatus.mockRejectedValue(
+        new NotFoundException('Agent agent-abc123 not found'),
+      );
+
+      await expect(
+        controller.updateStatus('agent-abc123', { status: 'active' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

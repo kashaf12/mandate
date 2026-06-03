@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
 import { eq, and, gte, lte, desc, SQL } from 'drizzle-orm';
@@ -7,23 +7,30 @@ import * as schema from '../database/schema';
 import { CreateAuditLogDto } from './dto/create-audit-log.dto';
 import { QueryAuditLogDto } from './dto/query-audit-log.dto';
 import { extractErrorInfo } from '../common/utils/error.utils';
+import { AgentsService } from '../agents/agents.service';
 
 @Injectable()
 export class AuditService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private db: Database,
+    @Inject(forwardRef(() => AgentsService))
+    private agentsService: AgentsService,
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
   /**
    * Create single audit log entry
    */
-  async create(dto: CreateAuditLogDto): Promise<schema.AuditLog> {
+  async create(
+    orgId: string,
+    dto: CreateAuditLogDto,
+  ): Promise<schema.AuditLog> {
     try {
       const [log] = await this.db
         .insert(schema.auditLogs)
         .values({
+          orgId, // NEW field
           agentId: dto.agentId,
           actionId: dto.actionId,
           timestamp: new Date(dto.timestamp),
@@ -56,10 +63,11 @@ export class AuditService {
   /**
    * Bulk insert audit logs (for SDK batch reporting)
    */
-  async bulkCreate(dtos: CreateAuditLogDto[]): Promise<number> {
+  async bulkCreate(orgId: string, dtos: CreateAuditLogDto[]): Promise<number> {
     if (dtos.length === 0) return 0;
 
     const values = dtos.map((dto) => ({
+      orgId, // NEW field
       agentId: dto.agentId,
       actionId: dto.actionId,
       timestamp: new Date(dto.timestamp),
@@ -79,6 +87,11 @@ export class AuditService {
       .insert(schema.auditLogs)
       .values(values)
       .returning();
+
+    this.logger.info('Bulk audit logs created', {
+      orgId,
+      count: result.length,
+    });
 
     return result.length;
   }
@@ -143,7 +156,10 @@ export class AuditService {
     context: Record<string, string>,
     matchedRules: Array<{ rule_id: string; rule_version: number }>,
   ): Promise<void> {
-    await this.create({
+    // Get agent to retrieve orgId
+    const agent = await this.agentsService.findOne(agentId);
+
+    await this.create(agent.orgId, {
       agentId,
       actionId: mandateId,
       timestamp: new Date().toISOString(),
@@ -164,7 +180,10 @@ export class AuditService {
     reason: string,
     killedBy: string,
   ): Promise<void> {
-    await this.create({
+    // Get agent to retrieve orgId
+    const agent = await this.agentsService.findOne(agentId);
+
+    await this.create(agent.orgId, {
       agentId,
       actionId: `kill-${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -172,6 +191,24 @@ export class AuditService {
       decision: 'BLOCK',
       reason,
       metadata: { killed_by: killedBy },
+    });
+  }
+
+  /**
+   * Log agent resurrection (called from AgentsService)
+   */
+  async logResurrect(agentId: string): Promise<void> {
+    // Get agent to retrieve orgId
+    const agent = await this.agentsService.findOne(agentId);
+
+    await this.create(agent.orgId, {
+      agentId,
+      actionId: `resurrect-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      actionType: 'agent_resurrected',
+      decision: 'ALLOW',
+      reason: 'Agent resurrected - kill switch removed',
+      metadata: {},
     });
   }
 }

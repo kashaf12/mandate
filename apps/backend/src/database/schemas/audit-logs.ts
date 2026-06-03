@@ -14,6 +14,7 @@ export const auditLogs = pgTable(
   'audit_logs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    orgId: varchar('org_id', { length: 64 }).notNull(),
     agentId: varchar('agent_id', { length: 64 }).notNull(),
     actionId: varchar('action_id', { length: 64 }).notNull(),
     timestamp: timestamp('timestamp').notNull(),
@@ -33,21 +34,20 @@ export const auditLogs = pgTable(
     createdAt: timestamp('created_at').defaultNow(),
   },
   (table) => [
+    index('idx_audit_org_id').on(table.orgId),
     index('idx_audit_agent_id').on(table.agentId),
     index('idx_audit_timestamp').on(table.timestamp),
     index('idx_audit_decision').on(table.decision),
     index('idx_audit_action_type').on(table.actionType),
-
+    index('idx_audit_org_agent').on(table.orgId, table.agentId),
     index('idx_audit_agent_decision_time').on(
       table.agentId,
       table.decision,
       table.timestamp,
     ),
-
     index('idx_audit_action_type_time').on(table.actionType, table.timestamp),
   ],
 );
 
-// Export TypeScript types
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;

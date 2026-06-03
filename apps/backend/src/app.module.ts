@@ -4,6 +4,8 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { OrganizationsModule } from './organizations/organizations.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AgentsModule } from './agents/agents.module';
 import { validateEnv } from './config/env.validation';
 import { LoggerModule } from './common/logger/logger.module';
@@ -26,6 +28,8 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
     }),
     LoggerModule,
     DatabaseModule,
+    OrganizationsModule,
+    ApiKeysModule,
     AgentsModule,
     HealthModule,
     PoliciesModule,

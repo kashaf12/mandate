@@ -1,7 +1,6 @@
 import {
   IsString,
   IsOptional,
-  IsEnum,
   IsObject,
   IsEmail,
   Length,
@@ -25,24 +24,6 @@ export class UpdateAgentDto {
   @IsOptional()
   @IsEmail()
   principal?: string;
-
-  @ApiPropertyOptional({
-    description: 'Environment where the agent operates',
-    enum: ['development', 'staging', 'production'],
-    example: 'staging',
-  })
-  @IsOptional()
-  @IsEnum(['development', 'staging', 'production'])
-  environment?: 'development' | 'staging' | 'production';
-
-  @ApiPropertyOptional({
-    description: 'Agent status',
-    enum: ['active', 'inactive'],
-    example: 'active',
-  })
-  @IsOptional()
-  @IsEnum(['active', 'inactive'])
-  status?: 'active' | 'inactive';
 
   @ApiPropertyOptional({
     description: 'Additional metadata as key-value pairs',

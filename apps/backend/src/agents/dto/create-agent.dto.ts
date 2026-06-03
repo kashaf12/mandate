@@ -2,7 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
   IsOptional,
-  IsEnum,
   IsObject,
   IsEmail,
   Length,
@@ -24,15 +23,6 @@ export class CreateAgentDto {
   @IsOptional()
   @IsEmail()
   principal?: string;
-
-  @ApiPropertyOptional({
-    description: 'Environment where the agent operates',
-    enum: ['development', 'staging', 'production'],
-    example: 'production',
-  })
-  @IsOptional()
-  @IsEnum(['development', 'staging', 'production'])
-  environment?: 'development' | 'staging' | 'production';
 
   @ApiPropertyOptional({
     description: 'Additional metadata as key-value pairs',

@@ -47,7 +47,95 @@ yarn add @mandate/sdk
 
 ## Quick Start
 
-### Basic Tool Execution
+### Quick Start with Backend (Recommended)
+
+**Phase 3** enables dynamic mandate issuance from a backend, allowing policies to be updated without redeploying agents.
+
+#### 1. Start Mandate Backend
+
+```bash
+git clone https://github.com/yourusername/mandate
+cd mandate/apps/backend
+pnpm install
+pnpm dev
+```
+
+Backend runs at `http://localhost:3000`.
+
+#### 2. Register Agent
+
+```bash
+curl -X POST http://localhost:3000/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "my-agent",
+    "name": "My Agent",
+    "principal": "dev@example.com"
+  }'
+
+# Response includes API key (save it!)
+{
+  "agent": { ... },
+  "apiKey": "sk-org-abc123-xxxxxxxxxx"
+}
+```
+
+#### 3. Create Client
+
+```typescript
+import { MandateClient } from '@mandate/sdk';
+
+const client = await MandateClient.create({
+  agentId: 'my-agent',
+  apiKey: 'sk-org-abc123-xxxxxxxxxx',
+  backendUrl: 'http://localhost:3000',
+  context: {
+    user_tier: 'free',
+    environment: 'production'
+  }
+});
+
+// Mandate fetched from backend automatically!
+```
+
+#### 4. Use Normally
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI();
+
+// LLM call with budget enforcement
+const response = await client.executeLLMWithBudget(
+  'openai',
+  'gpt-4o-mini',
+  messages,
+  (maxTokens) => openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages,
+    max_tokens: maxTokens
+  })
+);
+
+console.log(response.choices[0].message.content);
+```
+
+#### 5. Cleanup
+
+```typescript
+// On shutdown
+await client.close();
+```
+
+**See [examples/openai-backend.ts](../../examples/openai-backend.ts) for a complete example.**
+
+---
+
+### Quick Start (Standalone - Phase 1)
+
+**Note:** For new projects, use backend integration (above). Standalone mode is for testing or legacy compatibility.
+
+#### Basic Tool Execution
 
 ```typescript
 import { MandateClient, createToolAction } from "@mandate/sdk";
@@ -69,11 +157,11 @@ const action = createToolAction("my-agent", "read_file", { path: "/data.txt" });
 const result = await client.executeTool(action, () => readFile("/data.txt"));
 
 // 3. Check state
-console.log("Cost:", client.getCost());
-console.log("Remaining:", client.getRemainingBudget());
+console.log("Cost:", await client.getCost());
+console.log("Remaining:", await client.getRemainingBudget());
 ```
 
-### LLM Call with Budget Enforcement
+#### LLM Call with Budget Enforcement
 
 ```typescript
 import OpenAI from "openai";

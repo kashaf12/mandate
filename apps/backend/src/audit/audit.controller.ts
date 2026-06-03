@@ -41,12 +41,13 @@ export class AuditController {
     type: AuditLogResponseDto,
   })
   async create(
-    @Req() request: Request & { agent: Agent },
+    @Req() request: Request & { org: { orgId: string }; agent?: Agent }, // NEW: Access org context
     @Body() dto: CreateAuditLogDto,
   ): Promise<AuditLogResponseDto> {
-    const log = await this.auditService.create({
+    const orgId = request.org.orgId; // NEW: Extract from auth context
+    const log = await this.auditService.create(orgId, {
       ...dto,
-      agentId: request.agent.agentId,
+      agentId: request.agent?.agentId || dto.agentId,
     });
     return AuditLogResponseDto.fromEntity(log);
   }
@@ -68,14 +69,15 @@ export class AuditController {
     },
   })
   async bulkCreate(
-    @Req() request: Request & { agent: Agent },
+    @Req() request: Request & { org: { orgId: string }; agent?: Agent }, // NEW: Access org context
     @Body() dto: BulkCreateAuditLogDto,
   ): Promise<{ inserted: number }> {
+    const orgId = request.org.orgId; // NEW: Extract from auth context
     const logsWithAgentId = dto.logs.map((log) => ({
       ...log,
-      agentId: request.agent.agentId,
+      agentId: request.agent?.agentId || log.agentId,
     }));
-    const count = await this.auditService.bulkCreate(logsWithAgentId);
+    const count = await this.auditService.bulkCreate(orgId, logsWithAgentId);
     return { inserted: count };
   }
 
@@ -98,12 +100,12 @@ export class AuditController {
     type: [AuditLogResponseDto],
   })
   async query(
-    @Req() request: Request & { agent: Agent },
+    @Req() request: Request & { org: { orgId: string }; agent?: Agent }, // NEW: Access org context
     @Query() queryDto: QueryAuditLogDto,
   ): Promise<AuditLogResponseDto[]> {
     const logs = await this.auditService.query({
       ...queryDto,
-      agentId: request.agent.agentId,
+      agentId: request.agent?.agentId || queryDto.agentId,
     });
     return logs.map((log) => AuditLogResponseDto.fromEntity(log));
   }

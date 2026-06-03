@@ -6,7 +6,6 @@ import * as schema from './schema';
 import { DatabaseService } from './database.service';
 
 export const DATABASE_CONNECTION = 'DATABASE_CONNECTION';
-export const DATABASE_POOL = 'DATABASE_POOL';
 
 export type Database = NodePgDatabase<typeof schema>;
 
@@ -15,40 +14,30 @@ export type Database = NodePgDatabase<typeof schema>;
   imports: [ConfigModule],
   providers: [
     {
-      provide: DATABASE_POOL,
-      useFactory: (configService: ConfigService): Pool => {
+      provide: DATABASE_CONNECTION,
+      useFactory: (configService: ConfigService): Database => {
         const connectionString = configService.get<string>('DATABASE_URL');
         const pool = new Pool({
           connectionString,
-          max: 20, // Max connections
-          idleTimeoutMillis: 30000, // Close idle connections
-          connectionTimeoutMillis: 2000, // Timeout new connections
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 2000,
         });
 
-        // Handle pool errors
         pool.on('error', (err) => {
           console.error('Unexpected database error:', err);
         });
 
-        return pool;
+        return drizzle(pool, { schema });
       },
       inject: [ConfigService],
     },
     {
-      provide: DATABASE_CONNECTION,
-      useFactory: (pool: Pool): Database => {
-        return drizzle(pool, { schema });
-      },
-      inject: [DATABASE_POOL],
-    },
-    {
       provide: DatabaseService,
-      useFactory: (db: Database) => {
-        return new DatabaseService(db);
-      },
+      useFactory: (db: Database) => new DatabaseService(db),
       inject: [DATABASE_CONNECTION],
     },
   ],
-  exports: [DATABASE_CONNECTION, DATABASE_POOL, DatabaseService],
+  exports: [DATABASE_CONNECTION, DatabaseService],
 })
 export class DatabaseModule {}

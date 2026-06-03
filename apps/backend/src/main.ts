@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { Logger } from 'winston';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -35,8 +37,10 @@ async function bootstrap() {
 
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   await app.listen(port);
-  console.log(`🚀 Mandate backend running on http://localhost:${port}`);
-  console.log(
+
+  const logger = app.get<Logger>(WINSTON_MODULE_PROVIDER);
+  logger.info(`🚀 Mandate backend running on http://localhost:${port}`);
+  logger.info(
     `📚 Swagger documentation available at http://localhost:${port}/api`,
   );
 }

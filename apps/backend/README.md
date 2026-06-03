@@ -123,7 +123,9 @@ Context → Rules → Policies → Mandate
 - `POST /agents` - Create agent (returns API key)
 - `GET /agents` - List all agents
 - `GET /agents/:agentId` - Get agent by ID
-- `PUT /agents/:agentId` - Update agent
+- `PATCH /agents/:agentId` - Partially update agent (name, principal, metadata)
+- `GET /agents/:agentId/status` - Get agent status (including kill switch info)
+- `PATCH /agents/:agentId/status` - Update agent status (idempotent)
 - `DELETE /agents/:agentId` - Soft delete agent
 - `POST /agents/:agentId/kill` - Kill agent (requires API key, self-service only)
 - `GET /agents/:agentId/kill-status` - Get kill switch status (requires API key)
@@ -591,8 +593,7 @@ curl -X POST http://localhost:3000/agents \
   -H "Content-Type: application/json" \
   -d '{
     "name": "My Agent",
-    "principal": "user@example.com",
-    "environment": "production"
+    "principal": "user@example.com"
   }'
 ```
 

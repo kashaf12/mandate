@@ -13,8 +13,7 @@ curl -X POST http://localhost:3000/agents \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Test Agent",
-    "principal": "test@example.com",
-    "environment": "production"
+    "principal": "test@example.com"
   }'
 ```
 
@@ -35,13 +34,36 @@ curl -X GET http://localhost:3000/agents/agent-abc123
 ### Update Agent
 
 ```bash
-curl -X PUT http://localhost:3000/agents/agent-abc123 \
+curl -X PATCH http://localhost:3000/agents/agent-abc123 \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Updated Agent Name",
-    "status": "active"
+    "principal": "new@example.com",
+    "metadata": { "team": "ai-platform" }
   }'
 ```
+
+**Note**: Status cannot be updated via this endpoint. Use `PATCH /agents/:agentId/status` instead.
+
+### Get Agent Status
+
+```bash
+curl -X GET http://localhost:3000/agents/agent-abc123/status
+```
+
+**Response**: Returns agent status and kill switch information
+
+### Update Agent Status
+
+```bash
+curl -X PATCH http://localhost:3000/agents/agent-abc123/status \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "inactive"
+  }'
+```
+
+**Note**: Cannot activate agent with active kill switch. Use `/resurrect` endpoint instead.
 
 ### Delete Agent (Soft Delete)
 
@@ -366,7 +388,7 @@ http://localhost:3000/api
    ```bash
    curl -X POST http://localhost:3000/agents \
      -H "Content-Type: application/json" \
-     -d '{"name": "My Agent", "environment": "production"}'
+     -d '{"name": "My Agent"}'
    ```
 
    Save the `apiKey` from response.

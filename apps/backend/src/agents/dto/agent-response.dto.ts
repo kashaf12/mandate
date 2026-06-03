@@ -9,6 +9,12 @@ export class AgentResponseDto {
   agentId: string;
 
   @ApiProperty({
+    description: 'Organization ID (agent belongs to this org)',
+    example: 'org-abc123xyz789',
+  })
+  orgId: string; // NEW
+
+  @ApiProperty({
     description: 'Display name for the agent',
     example: 'Production AI Assistant',
   })
@@ -19,13 +25,6 @@ export class AgentResponseDto {
     example: 'dev@example.com',
   })
   principal?: string;
-
-  @ApiProperty({
-    description: 'Environment where the agent operates',
-    example: 'production',
-    enum: ['development', 'staging', 'production'],
-  })
-  environment: string;
 
   @ApiProperty({
     description: 'Agent status',
@@ -49,32 +48,12 @@ export class AgentResponseDto {
   static fromEntity(agent: Agent): AgentResponseDto {
     return {
       agentId: agent.agentId,
+      orgId: agent.orgId, // NEW
       name: agent.name,
       principal: agent.principal ?? undefined,
-      environment: agent.environment ?? 'development',
       status: agent.status ?? 'active',
       metadata: agent.metadata ?? {},
       createdAt: agent.createdAt ?? new Date(),
-    };
-  }
-}
-
-export class CreateAgentResponseDto extends AgentResponseDto {
-  @ApiProperty({
-    description:
-      'API key for authenticating requests. **IMPORTANT:** This is returned only once on creation. Store it securely.',
-    example: 'sk-abc123def456ghi789jkl012mno345pqr678stu901vwx234yz',
-    readOnly: true,
-  })
-  apiKey: string;
-
-  static fromEntityWithKey(
-    agent: Agent,
-    apiKey: string,
-  ): CreateAgentResponseDto {
-    return {
-      ...AgentResponseDto.fromEntity(agent),
-      apiKey,
     };
   }
 }

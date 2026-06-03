@@ -5,7 +5,8 @@ const AGENT_ID_LENGTH = 12;
 const POLICY_ID_LENGTH = 12;
 const RULE_ID_LENGTH = 12;
 const MANDATE_ID_LENGTH = 12;
-const API_KEY_LENGTH = 32;
+const ORG_ID_LENGTH = 12;
+const KEY_ID_LENGTH = 16;
 
 export function generateAgentId(): string {
   return `agent-${nanoid(AGENT_ID_LENGTH)}`;
@@ -23,8 +24,12 @@ export function generateMandateId(): string {
   return `mnd-${nanoid(MANDATE_ID_LENGTH)}`;
 }
 
-export function generateApiKey(): string {
-  return `sk-${nanoid(API_KEY_LENGTH)}`;
+export function generateOrgId(): string {
+  return `org-${nanoid(ORG_ID_LENGTH)}`;
+}
+
+export function generateKeyId(): string {
+  return `key-${nanoid(KEY_ID_LENGTH)}`;
 }
 
 export function hashApiKey(apiKey: string): string {

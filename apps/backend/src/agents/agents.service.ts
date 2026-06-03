@@ -2,6 +2,8 @@ import {
   Injectable,
   Inject,
   NotFoundException,
+  BadRequestException,
+  ConflictException,
   forwardRef,
 } from '@nestjs/common';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
@@ -14,13 +16,10 @@ import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { KillAgentDto } from './dto/kill-agent.dto';
 import { KillStatusResponseDto } from './dto/kill-status-response.dto';
-import {
-  generateAgentId,
-  generateApiKey,
-  hashApiKey,
-} from '../common/utils/crypto.utils';
+import { generateAgentId } from '../common/utils/crypto.utils'; // REMOVED: generateApiKey, hashApiKey
 import { extractErrorInfo } from '../common/utils/error.utils';
 import { AuditService } from '../audit/audit.service';
+import { OrganizationsService } from '../organizations/organizations.service'; // NEW
 
 @Injectable()
 export class AgentsService {
@@ -29,37 +28,47 @@ export class AgentsService {
     private db: Database,
     @Inject(forwardRef(() => AuditService))
     private auditService: AuditService,
+    private organizationsService: OrganizationsService, // NEW
     @Inject(WINSTON_MODULE_PROVIDER) private logger: Logger,
   ) {}
 
-  async create(createAgentDto: CreateAgentDto): Promise<{
-    agent: schema.Agent;
-    apiKey: string;
-  }> {
+  /**
+   * Create new agent within an organization
+   *
+   * CHANGED: Now requires orgId parameter (from authenticated request)
+   * REMOVED: apiKey generation (agents no longer have individual keys)
+   */
+  async create(
+    orgId: string,
+    createAgentDto: CreateAgentDto,
+  ): Promise<schema.Agent> {
     try {
-      // Generate unique agent_id
+      // 1. Verify org exists (will throw if not)
+      await this.organizationsService.findByOrgId(orgId);
+
+      // 2. Generate agent ID
       const agentId = generateAgentId();
 
-      // Generate API key (returned once, never stored in plaintext)
-      const apiKey = generateApiKey();
-
-      // Hash API key for storage (SHA-256)
-      const apiKeyHash = hashApiKey(apiKey);
-
-      // Insert agent
+      // 3. Create agent (NO API KEY)
       const [agent] = await this.db
         .insert(schema.agents)
         .values({
           agentId,
-          apiKeyHash,
+          orgId, // NEW: Agent belongs to org
           name: createAgentDto.name,
           principal: createAgentDto.principal,
-          environment: createAgentDto.environment || 'development',
           metadata: createAgentDto.metadata || {},
         })
         .returning();
 
-      return { agent, apiKey };
+      this.logger.info('Agent created', {
+        agentId,
+        orgId,
+        name: createAgentDto.name,
+        principal: createAgentDto.principal,
+      });
+
+      return agent;
     } catch (error) {
       const { message, stack } = extractErrorInfo(error);
       this.logger.error('Failed to create agent', {
@@ -68,7 +77,6 @@ export class AgentsService {
         createAgentDto: {
           name: createAgentDto.name,
           principal: createAgentDto.principal,
-          environment: createAgentDto.environment,
         },
       });
       throw error;
@@ -104,27 +112,12 @@ export class AgentsService {
       .where(inArray(schema.agents.agentId, agentIds));
   }
 
-  async findByApiKey(apiKey: string): Promise<schema.Agent> {
-    const apiKeyHash = hashApiKey(apiKey);
-
-    // Direct indexed lookup - O(1) thanks to idx_agents_api_key_hash
-    const [agent] = await this.db
-      .select()
-      .from(schema.agents)
-      .where(eq(schema.agents.apiKeyHash, apiKeyHash))
-      .limit(1);
-
-    if (!agent) {
-      throw new NotFoundException('Invalid API key');
-    }
-
-    // Additional check: ensure agent is active
-    if (agent.status !== 'active') {
-      throw new NotFoundException('Invalid API key');
-    }
-
-    return agent;
-  }
+  /**
+   * REMOVED METHOD: findByApiKey()
+   *
+   * This method is now handled by ApiKeysService.findByApiKey()
+   * API keys are no longer agent-specific.
+   */
 
   async update(
     agentId: string,
@@ -146,6 +139,48 @@ export class AgentsService {
     return agent;
   }
 
+  /**
+   * Set agent status (idempotent).
+   * If status is already set to the desired value, returns agent without update.
+   * Prevents activating agent with active kill switch.
+   */
+  async setStatus(
+    agentId: string,
+    status: 'active' | 'inactive',
+  ): Promise<schema.Agent> {
+    const agent = await this.findOne(agentId);
+
+    if (agent.status === status) {
+      return agent;
+    }
+
+    // Validation: prevent activating agent with kill switch
+    if (status === 'active') {
+      const isKilled = await this.isKilled(agentId);
+      if (isKilled) {
+        throw new BadRequestException(
+          'Cannot activate agent with active kill switch. Use POST /agents/:agentId/resurrect to remove kill switch first.',
+        );
+      }
+    }
+
+    // Update status
+    const [updatedAgent] = await this.db
+      .update(schema.agents)
+      .set({
+        status,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.agents.agentId, agentId))
+      .returning();
+
+    if (!updatedAgent) {
+      throw new NotFoundException(`Agent ${agentId} not found`);
+    }
+
+    return updatedAgent;
+  }
+
   async remove(agentId: string): Promise<void> {
     const result = await this.db
       .update(schema.agents)
@@ -162,26 +197,26 @@ export class AgentsService {
    * Kill agent (emergency termination)
    */
   async kill(agentId: string, dto: KillAgentDto): Promise<void> {
+    // 1. Check if agent exists
     await this.findOne(agentId);
 
-    await this.db
-      .insert(killSwitchSchema.killSwitches)
-      .values({
-        agentId,
-        reason: dto.reason,
-        killedBy: dto.killedBy,
-      })
-      .onConflictDoUpdate({
-        target: killSwitchSchema.killSwitches.agentId,
-        set: {
-          killedAt: new Date(),
-          reason: dto.reason,
-          killedBy: dto.killedBy,
-        },
-      });
+    // 2. Check if already killed
+    const isAlreadyKilled = await this.isKilled(agentId);
+    if (isAlreadyKilled) {
+      throw new ConflictException(`Agent ${agentId} is already killed.`);
+    }
 
-    await this.update(agentId, { status: 'inactive' });
+    // 3. Proceed with kill (only if not already killed)
+    await this.db.insert(killSwitchSchema.killSwitches).values({
+      agentId,
+      reason: dto.reason,
+      killedBy: dto.killedBy,
+    });
 
+    // 4. Mark agent inactive
+    await this.setStatus(agentId, 'inactive');
+
+    // 5. Audit log (will get orgId from agent)
     await this.auditService.logKillSwitch(agentId, dto.reason, dto.killedBy);
   }
 
@@ -225,23 +260,17 @@ export class AgentsService {
    */
   async resurrect(agentId: string): Promise<void> {
     try {
+      // Check if agent exists
       await this.findOne(agentId);
 
       await this.db
         .delete(killSwitchSchema.killSwitches)
         .where(eq(killSwitchSchema.killSwitches.agentId, agentId));
 
-      await this.update(agentId, { status: 'active' });
+      await this.setStatus(agentId, 'active');
 
-      await this.auditService.create({
-        agentId,
-        actionId: `resurrect-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        actionType: 'agent_resurrected',
-        decision: 'ALLOW',
-        reason: 'Agent resurrected - kill switch removed',
-        metadata: {},
-      });
+      // Audit log (will get orgId from agent)
+      await this.auditService.logResurrect(agentId);
     } catch (error) {
       const { message, stack } = extractErrorInfo(error);
       this.logger.error('Failed to resurrect agent', {
